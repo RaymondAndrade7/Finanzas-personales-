@@ -569,3 +569,30 @@ body.auth-mode { padding-bottom: 0; background: #030303; }
 .brand b, .auth-brand b { font-weight: inherit; color: var(--accent); }
 .auth-brand b { color: #c8f031; }
 .brand span, .auth-brand span { letter-spacing: -0.02em; }
+
+/* ---------- Marca animada en la pantalla de acceso ---------- */
+.auth-brand { gap: 0; font-size: 1.9rem; font-weight: 800; letter-spacing: -0.045em; line-height: 1; }
+.auth-brand span, .auth-brand b {
+  display: inline-block;
+  opacity: 0;
+  filter: blur(10px);
+  transform: translateY(16px) scale(.92);
+  animation: letterIn .75s cubic-bezier(.2, .8, .2, 1) forwards;
+  animation-delay: calc(.35s + var(--i) * 90ms);
+}
+.auth-brand b {
+  color: #c8f031;
+  animation-name: letterIn, limeGlow;
+  animation-duration: .75s, 2.6s;
+  animation-delay: calc(.35s + var(--i) * 90ms), 1.25s;
+  animation-fill-mode: forwards, both;
+  animation-timing-function: cubic-bezier(.2, .8, .2, 1), ease-in-out;
+}
+@keyframes letterIn { to { opacity: 1; filter: blur(0); transform: none; } }
+@keyframes limeGlow {
+  0%, 100% { text-shadow: 0 0 0 rgba(200, 240, 49, 0); }
+  40% { text-shadow: 0 0 22px rgba(200, 240, 49, .8), 0 0 4px rgba(200, 240, 49, .6); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-brand span, .auth-brand b { animation: none; opacity: 1; filter: none; transform: none; }
+}
