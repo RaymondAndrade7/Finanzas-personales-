@@ -39,7 +39,7 @@ function defaultState() {
   const ingresos = ['Salario', 'Negocio', 'Extras', 'Otros ingresos'];
   return {
     version: 1,
-    settings: { currency: 'USD' },
+    settings: { currency: 'USD', plan: { mode: 'pct', pct: 20, fixed: 0, expected: 0 } },
     categories: [
       ...gastos.map(([n, g], i) => cat(n, 'gasto', g, i)),
       ...ingresos.map((n, i) => cat(n, 'ingreso', null, i + 6))
@@ -145,22 +145,28 @@ function saveAll() {
 
 /* ---------- Formatos ---------- */
 
-let moneyFmt = null;
+let moneyFmt = null, moneyFmt0 = null;
 function buildFormatter() {
   const cur = (state.settings.currency || 'USD').trim().toUpperCase();
   try {
     const f = new Intl.NumberFormat('es', { style: 'currency', currency: cur, maximumFractionDigits: 2 });
+    const f0 = new Intl.NumberFormat('es', { style: 'currency', currency: cur, maximumFractionDigits: 0 });
     moneyFmt = n => f.format(n);
+    moneyFmt0 = n => f0.format(n);
   } catch {
     // Monedas no ISO (ej. USDT)
     const f = new Intl.NumberFormat('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const f0 = new Intl.NumberFormat('es', { maximumFractionDigits: 0 });
     moneyFmt = n => `${f.format(n)} ${cur}`;
+    moneyFmt0 = n => `${f0.format(n)} ${cur}`;
   }
 }
 // Ocultar montos (como en las apps de exchange). Preferencia de este dispositivo.
 let hideAmounts = false;
 try { hideAmounts = localStorage.getItem('mf-hide') === '1'; } catch { /* sin acceso */ }
 const fmt = n => hideAmounts ? '••••••' : moneyFmt(round2(n));
+/** Para recuadros pequeños: sin decimales desde 1.000. */
+const fmtS = n => hideAmounts ? '••••••' : Math.abs(n) >= 1000 ? moneyFmt0(Math.round(n)) : moneyFmt(round2(n));
 
 /* ---------- Tema ---------- */
 const THEME_KEY = 'mf-theme';
@@ -265,6 +271,173 @@ function lastMonths(n, fromYM = currentYM) {
   const out = [];
   for (let i = n - 1; i >= 0; i--) out.push(shiftMonth(fromYM, -i));
   return out;
+}
+
+/* ---------- Plan de ahorro ---------- */
+
+const PLAN_DEFAULT = { mode: 'pct', pct: 20, fixed: 0, expected: 0 };
+const planOf = L => ({ ...PLAN_DEFAULT, ...((L && L.settings && L.settings.plan) || {}) });
+
+/**
+ * Estado del plan de ahorro de un libro (personal o de otra persona) en un mes.
+ * Ahorro = ingresos − gastos que no son de ahorro (lo enviado a "Ahorro e inversión" cuenta como ahorro).
+ */
+function planFor(L, ym) {
+  const plan = planOf(L);
+  const cat = id => L.categories.find(c => c.id === id);
+  let ing = 0, spend = 0;
+  for (const t of L.transactions) {
+    if (!t.date.startsWith(ym)) continue;
+    if (t.type === 'ingreso') ing += t.amount;
+    else if (t.type === 'gasto' && (cat(t.categoryId)?.group || 'gusto') !== 'ahorro') spend += t.amount;
+  }
+  const base = ing > 0 ? ing : Number(plan.expected) || 0;
+  const estimated = ing <= 0 && base > 0;
+  const target = round2(plan.mode === 'fixed' ? Number(plan.fixed) || 0 : base * (Number(plan.pct) || 0) / 100);
+  const saved = round2(ing - spend);
+  const nowYM = ymFromDate(new Date());
+  const isCurrent = ym === nowYM, isPast = ym < nowYM;
+  const [y, m] = ym.split('-').map(Number);
+  const dim = new Date(y, m, 0).getDate();
+  const daysLeft = isCurrent ? dim - new Date().getDate() + 1 : 0;
+  const canSpend = round2(base - target - spend);      // lo que aún se puede gastar sin romper el plan
+  const perDay = daysLeft > 0 ? canSpend / daysLeft : 0;
+  let status;
+  if (target <= 0) status = 'sin-plan';
+  else if (ing > 0 && saved >= target && (isPast || canSpend >= 0)) status = isPast ? 'cumplido' : 'cumpliendo';
+  else if (isPast) status = 'no-cumplido';
+  else if (canSpend < 0) status = 'en-riesgo';
+  else status = 'en-camino';
+  return { plan, ing, spend, base, estimated, target, saved, canSpend, perDay, daysLeft, isCurrent, isPast, status,
+    progress: target > 0 ? Math.max(0, saved) / target : 0 };
+}
+
+/** Últimos meses (hasta el actual) con su estado, y la racha de meses cumplidos. */
+function planHistory(L, n = 6) {
+  const months = lastMonths(n, ymFromDate(new Date()));
+  const hist = months.map(ym => ({ ym, ...planFor(L, ym) }));
+  let streak = 0;
+  for (let i = hist.length - 1; i >= 0; i--) {
+    const h = hist[i];
+    if (h.isCurrent && h.status !== 'cumpliendo') continue; // el mes en curso aún no rompe la racha
+    if (h.status === 'cumplido' || h.status === 'cumpliendo') streak++;
+    else break;
+  }
+  return { hist, streak };
+}
+
+const PLAN_STATUS = {
+  'cumpliendo': ['Meta alcanzada', 'chip-up'],
+  'cumplido': ['Cumplido', 'chip-up'],
+  'en-camino': ['En camino', 'chip-neutral'],
+  'en-riesgo': ['En riesgo', 'chip-down'],
+  'no-cumplido': ['No cumplido', 'chip-down'],
+  'sin-plan': ['Sin datos', 'chip-neutral']
+};
+
+/** Tarjeta del plan de ahorro del mes. */
+function planCard(L, { who = null, editable = false } = {}) {
+  const p = planFor(L, currentYM);
+  const { hist, streak } = planHistory(L);
+  const mes = monthName(currentYM, { month: 'long' }).toLowerCase();
+  const head = `<div class="card-head"><h2>${who ? `Plan de ahorro de ${esc(who)}` : 'Plan de ahorro'} · ${esc(mes)}</h2>
+    ${editable ? `<button class="link" data-action="goto" data-view="metas">Ajustar ${ICONS.chevron}</button>` : ''}</div>`;
+  if (p.status === 'sin-plan') {
+    return `<div class="card plan">${head}
+      <p class="muted" style="margin:0;font-size:.9rem">${editable
+        ? 'Registra tus ingresos del mes, o indica tu ingreso mensual esperado en <b>Metas</b>, para calcular cuánto ahorrar.'
+        : 'Aún no hay ingresos registrados este mes.'}</p></div>`;
+  }
+  const [label, cls] = PLAN_STATUS[p.status];
+  const rule = p.plan.mode === 'fixed' ? 'monto fijo' : `${Number(p.plan.pct) || 0}% de ${p.estimated ? 'tu ingreso esperado' : 'tus ingresos'}`;
+  let foot;
+  if (p.status === 'cumpliendo') foot = `¡Ya alcanzaste la meta del mes! 🎉 ${p.canSpend > 0 ? `Aún puedes gastar ${esc(fmt(p.canSpend))} sin romperla.` : ''}`;
+  else if (p.status === 'cumplido') foot = '¡Cumpliste el plan de este mes! 🎉';
+  else if (p.status === 'no-cumplido') foot = `Faltaron ${esc(fmt(p.target - p.saved))} para la meta.`;
+  else if (p.canSpend >= 0) foot = `Puedes gastar <b>${esc(fmt(p.canSpend))}</b> más este mes${p.daysLeft > 0 ? ` · <b>${esc(fmt(p.perDay))}</b> por día` : ''}.`;
+  else foot = `Te pasaste <b class="bad">${esc(fmt(-p.canSpend))}</b> del gasto que permite el plan.`;
+  if (p.estimated) foot += ' <span class="muted">(estimado con el ingreso esperado)</span>';
+
+  const dots = hist.map(h => {
+    const ok = h.status === 'cumplido' || h.status === 'cumpliendo';
+    const bad = h.status === 'no-cumplido';
+    const st = h.isCurrent ? (ok ? 'ok' : 'now') : ok ? 'ok' : bad ? 'bad' : 'none';
+    return `<span class="pdot ${st}" title="${esc(monthName(h.ym))}: ${esc(PLAN_STATUS[h.status][0])}"><i></i>${esc(monthName(h.ym, { month: 'narrow' }))}</span>`;
+  }).join('');
+
+  return `<div class="card plan">
+    ${head}
+    <div class="plan-top">
+      <div class="grow"><div class="plan-saved ${p.saved < 0 ? 'gas' : ''}">${esc(fmt(p.saved))}</div>
+        <small>ahorrado de <b>${esc(fmt(p.target))}</b> · ${esc(rule)}</small></div>
+      <span class="chip ${cls}">${label}</span>
+    </div>
+    <div class="bar plan-bar"><div class="fill ${p.status === 'en-riesgo' ? 'over' : ''}" style="width:${Math.min(100, p.progress * 100)}%"></div></div>
+    <p class="plan-foot">${foot}</p>
+    <div class="plan-history"><div class="pdots">${dots}</div>${streak > 0 ? `<span class="streak">🔥 ${streak} ${streak === 1 ? 'mes' : 'meses'} seguidos</span>` : ''}</div>
+  </div>`;
+}
+
+/** En el espacio compartido: el plan de cada integrante y el total juntos. */
+function couplePlansCard(sp) {
+  let tSaved = 0, tTarget = 0, any = false;
+  const rows = sp.members.map((m, i) => {
+    const L = m.me ? stores.personal : stores['user:' + m.uid];
+    const name = m.me ? 'Tú' : firstName(m.name || m.email);
+    const av = `<span class="avatar" style="--c:${PALETTE[(i + 3) % PALETTE.length]}">${esc(name.charAt(0).toUpperCase())}</span>`;
+    if (!L) return `<div class="asset">${av}<div class="grow"><div class="asset-name">${esc(name)}</div>
+      <div class="asset-sub">No comparte sus finanzas personales</div></div></div>`;
+    const p = planFor(L, currentYM);
+    if (p.status === 'sin-plan') return `<div class="asset">${av}<div class="grow"><div class="asset-name">${esc(name)}</div>
+      <div class="asset-sub">Sin ingresos registrados este mes</div></div></div>`;
+    any = true; tSaved += p.saved; tTarget += p.target;
+    const [label, cls] = PLAN_STATUS[p.status];
+    return `<div class="asset plan-row">${av}
+      <div class="grow"><div class="asset-name">${esc(name)} <span class="chip ${cls}">${label}</span></div>
+        <div class="bar"><div class="fill ${p.status === 'en-riesgo' ? 'over' : ''}" style="width:${Math.min(100, p.progress * 100)}%"></div></div>
+        <div class="asset-sub">${esc(fmt(p.saved))} de ${esc(fmt(p.target))}</div></div></div>`;
+  }).join('');
+  const total = any ? `<div class="plan-total"><span>Juntos este mes</span><b>${esc(fmt(tSaved))} <small>de ${esc(fmt(tTarget))}</small></b></div>` : '';
+  return `<div class="card plan"><h2>Planes de ahorro · ${esc(monthName(currentYM, { month: 'long' }).toLowerCase())}</h2>${rows}${total}</div>`;
+}
+
+/** Configuración del plan (en Metas). */
+function planSettingsCard() {
+  const plan = planOf(state);
+  const p = planFor(state, ymFromDate(new Date()));
+  const base = p.base;
+  const monthly = plan.mode === 'fixed' ? Number(plan.fixed) || 0 : base * (Number(plan.pct) || 0) / 100;
+  const ef = state.goals.find(g => /emergencia/i.test(g.name));
+  let projection = '';
+  if (ef && Number(ef.target) > Number(ef.saved) && monthly > 0) {
+    const months = Math.ceil((Number(ef.target) - (Number(ef.saved) || 0)) / monthly);
+    projection = `<p class="muted plan-proj">A este ritmo completarías tu <b>${esc(ef.name)}</b> en <b>${months} ${months === 1 ? 'mes' : 'meses'}</b>.</p>`;
+  }
+  return `<div class="card">
+    <h2>Mi plan de ahorro</h2>
+    <p class="muted" style="margin:-6px 0 12px;font-size:.88rem">Aparta cada mes una parte de lo que ganas. Lo recomendado es al menos el 20%.</p>
+    <div class="pills">
+      <button class="pill ${plan.mode === 'pct' ? 'active' : ''}" data-action="plan-mode" data-mode="pct">% del ingreso</button>
+      <button class="pill ${plan.mode === 'fixed' ? 'active' : ''}" data-action="plan-mode" data-mode="fixed">Monto fijo</button>
+    </div>
+    ${plan.mode === 'pct' ? `
+      <div class="plan-pct">
+        <input type="range" min="5" max="60" step="1" value="${Number(plan.pct) || 20}" data-plan="pct" aria-label="Porcentaje a ahorrar">
+        <b id="planPctLabel">${Number(plan.pct) || 20}%</b>
+      </div>
+      <div class="pills">${[10, 15, 20, 30].map(v => `<button class="pill sm ${Number(plan.pct) === v ? 'active' : ''}" data-action="plan-pct" data-v="${v}">${v}%</button>`).join('')}</div>`
+    : `<label class="field" style="margin-top:12px">Monto a ahorrar cada mes
+        <input type="number" min="0" step="0.01" inputmode="decimal" data-plan="fixed" value="${Number(plan.fixed) || ''}" placeholder="0.00"></label>`}
+    <label class="field" style="margin-top:12px">Ingreso mensual esperado (opcional)
+      <input type="number" min="0" step="0.01" inputmode="decimal" data-plan="expected" value="${Number(plan.expected) || ''}" placeholder="Ej: 2000">
+      <small>Se usa mientras no hayas registrado tus ingresos del mes.</small></label>
+    ${base > 0 ? `<div class="suggest" style="margin-top:12px">
+        <div><small>Ingreso ${p.estimated ? 'esperado' : 'del mes'}</small><b>${esc(fmtS(base))}</b></div>
+        <div><small>Ahorro al mes</small><b class="ing">${esc(fmtS(monthly))}</b></div>
+        <div><small>Ahorro al año</small><b>${esc(fmtS(monthly * 12))}</b></div>
+      </div>` : ''}
+    ${projection}
+  </div>`;
 }
 
 /** Promedio de gastos (sin la categoría de ahorro) de los últimos meses con datos. */
@@ -496,10 +669,11 @@ function renderInicio() {
       <button class="q" data-action="goto" data-view="metas"><span class="q-ico">${ICONS.flag}</span>Metas</button>
     </div>
     <div class="stats">
-      ${stat('Ingresos', fmt(ing), 'ing')}
-      ${stat('Gastos', fmt(gas), 'gas')}
+      ${stat('Ingresos', fmtS(ing), 'ing')}
+      ${stat('Gastos', fmtS(gas), 'gas')}
       ${stat('Ahorro', rate === null ? '—' : pct(rate), rateCls)}
     </div>
+    ${c.kind === 'space' ? couplePlansCard(c.space) : planCard(state, { who: c.kind === 'partner' ? c.short : null, editable: c.kind === 'personal' })}
     <div class="card">
       <div class="card-head"><h2>${c.kind === 'personal' ? 'Mis cuentas' : 'Cuentas'}</h2>${isReadOnly() ? '' : `<button class="link" data-action="goto" data-view="ajustes">Gestionar ${ICONS.chevron}</button>`}</div>
       ${state.accounts.length ? state.accounts.map((a, i) => {
@@ -615,9 +789,9 @@ function renderPresupuesto() {
       </div>
       ${base > 0 ? `<p class="muted" style="margin:12px 0 0;font-size:.88rem">Según la regla 50/30/20, con tus ingresos de este mes:</p>
       <div class="suggest">
-        <div><small>Necesidades (50%)</small><b>${esc(fmt(base * .5))}</b><small>Presup.: ${esc(fmt(byGroup.necesidad))}</small></div>
-        <div><small>Gustos (30%)</small><b>${esc(fmt(base * .3))}</b><small>Presup.: ${esc(fmt(byGroup.gusto))}</small></div>
-        <div><small>Ahorro (20%)</small><b>${esc(fmt(base * .2))}</b><small>Presup.: ${esc(fmt(byGroup.ahorro))}</small></div>
+        <div><small>Necesidades (50%)</small><b>${esc(fmtS(base * .5))}</b><small>Presup.: ${esc(fmt(byGroup.necesidad))}</small></div>
+        <div><small>Gustos (30%)</small><b>${esc(fmtS(base * .3))}</b><small>Presup.: ${esc(fmt(byGroup.gusto))}</small></div>
+        <div><small>Ahorro (20%)</small><b>${esc(fmtS(base * .2))}</b><small>Presup.: ${esc(fmt(byGroup.ahorro))}</small></div>
       </div>` : ''}
     </div>
     <div class="card">
@@ -647,14 +821,19 @@ function renderPresupuesto() {
 
 function renderMetas() {
   const avg = avgMonthlyExpenses();
+  const c = currentCtx();
+  const planBlock = c.kind === 'personal' ? planSettingsCard()
+    : c.kind === 'partner' ? planCard(state, { who: c.short })
+    : `<div class="card ledger-note">${ICONS.users}<div>Cada integrante configura su plan de ahorro en <b>sus finanzas personales</b> (selector <b>Yo</b>). Aquí, en Inicio, ven los planes de los dos.</div></div>`;
   $('#view-metas').innerHTML = `
+    ${planBlock}
     <div class="card">
       <h2>Fondo de emergencia recomendado</h2>
       ${avg > 0 ? `<p class="muted" style="margin:0 0 8px;font-size:.9rem">Gastas en promedio <b>${esc(fmt(avg))}</b> al mes (sin contar ahorro).</p>
         <div class="suggest">
-          <div><small>Mínimo (1 mes)</small><b>${esc(fmt(avg))}</b></div>
-          <div><small>Bueno (3 meses)</small><b>${esc(fmt(avg * 3))}</b></div>
-          <div><small>Ideal (6 meses)</small><b>${esc(fmt(avg * 6))}</b></div>
+          <div><small>Mínimo (1 mes)</small><b>${esc(fmtS(avg))}</b></div>
+          <div><small>Bueno (3 meses)</small><b>${esc(fmtS(avg * 3))}</b></div>
+          <div><small>Ideal (6 meses)</small><b>${esc(fmtS(avg * 6))}</b></div>
         </div>`
         : empty('Registra tus gastos y aquí te diremos cuánto deberías tener en tu fondo de emergencia.')}
     </div>
@@ -1063,6 +1242,16 @@ document.addEventListener('click', e => {
       save(); render();
       break;
     case 'quick': openTx(null, btn.dataset.type); break;
+    case 'plan-mode':
+      if (guardRO()) break;
+      state.settings.plan = { ...planOf(state), mode: btn.dataset.mode };
+      save(); render();
+      break;
+    case 'plan-pct':
+      if (guardRO()) break;
+      state.settings.plan = { ...planOf(state), mode: 'pct', pct: Number(btn.dataset.v) };
+      save(); render();
+      break;
     case 'ctx': switchCtx(btn.dataset.key); break;
     case 'create-space': {
       const name = $('#newSpaceName').value.trim() || 'Casa';
@@ -1140,6 +1329,13 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   const t = e.target;
   const d = t.dataset;
+  if (d.plan) {
+    if (guardRO()) return;
+    const v = Math.max(0, round2(t.value));
+    state.settings.plan = { ...planOf(state), [d.plan]: d.plan === 'pct' ? Math.min(100, Math.round(v)) : v };
+    save(); render();
+    return;
+  }
   if (d.shareSpace) {
     window.Cloud?.setShare(d.shareSpace, t.checked)
       .then(() => toast(t.checked ? 'Ahora pueden ver tus finanzas personales' : 'Dejaste de compartir tus finanzas personales'))
@@ -1178,6 +1374,9 @@ document.addEventListener('change', e => {
   render();
 });
 
+document.addEventListener('input', e => {
+  if (e.target.dataset?.plan === 'pct') { const l = $('#planPctLabel'); if (l) l.textContent = e.target.value + '%'; }
+});
 $('#txSearch').addEventListener('input', e => { txFilter.q = e.target.value; renderMovimientos(); });
 $('#txType').addEventListener('change', e => { txFilter.type = e.target.value; renderMovimientos(); });
 $('#prevMonth').addEventListener('click', () => { currentYM = shiftMonth(currentYM, -1); render(); });
@@ -1296,6 +1495,8 @@ window.App = {
       state = stores[key];
       buildFormatter();
       if (appStarted) render();
+    } else if (appStarted && isSpace() && currentView === 'inicio') {
+      render(); // el espacio muestra los planes de ahorro de cada integrante
     }
     if (appStarted) renderCtxBar();
   },

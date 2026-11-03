@@ -85,6 +85,14 @@ python3 -m http.server 8000
 # abre http://localhost:8000/?emulador
 ```
 
+## 🎯 Plan de ahorro
+
+En **Metas → Mi plan de ahorro** eliges cuánto apartar cada mes: un **porcentaje de tus ingresos** (20% recomendado) o un **monto fijo**. Si aún no registraste tu sueldo del mes, puedes indicar tu **ingreso mensual esperado**.
+
+- En **Inicio** verás cuánto llevas ahorrado de la meta, si vas *en camino*, *en riesgo* o ya la *alcanzaste*, **cuánto puedes gastar todavía este mes (y por día)**, el historial de 6 meses y tu racha de meses cumpliendo.
+- Cuenta como ahorro lo que no gastas de tus ingresos, incluido lo que envías a la categoría *Ahorro e inversión*.
+- En un **espacio compartido** se ven los planes de cada integrante (de quienes comparten sus finanzas personales) y el total que ahorran juntos.
+
 ## 👥 Finanzas compartidas (pareja, familia, roommates)
 
 Requiere el modo con cuentas (Firebase).

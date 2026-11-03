@@ -1,5 +1,5 @@
 // Service worker: permite usar la app sin conexión.
-const CACHE = 'rayfin-v4';
+const CACHE = 'rayfin-v5';
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './cloud.js', './auth-bg.js', './splash.js', './firebase-config.js', './manifest.json',
   './icons/rayfin-rf.svg', './icons/rayfin-rf-180.png', './icons/rayfin-rf-192.png', './icons/rayfin-rf-512.png', './icons/rayfin-rf-maskable-512.png'];
 
