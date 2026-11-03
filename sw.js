@@ -1,5 +1,5 @@
 // Service worker: permite usar la app sin conexión.
-const CACHE = 'mis-finanzas-v2';
+const CACHE = 'mis-finanzas-v3';
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './cloud.js', './firebase-config.js', './manifest.json',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png'];
 

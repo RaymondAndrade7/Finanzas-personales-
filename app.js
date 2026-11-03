@@ -140,7 +140,37 @@ function buildFormatter() {
     moneyFmt = n => `${f.format(n)} ${cur}`;
   }
 }
-const fmt = n => moneyFmt(round2(n));
+// Ocultar montos (como en las apps de exchange). Preferencia de este dispositivo.
+let hideAmounts = false;
+try { hideAmounts = localStorage.getItem('mf-hide') === '1'; } catch { /* sin acceso */ }
+const fmt = n => hideAmounts ? '••••••' : moneyFmt(round2(n));
+
+/* ---------- Tema ---------- */
+const THEME_KEY = 'mf-theme';
+function getTheme() {
+  try { return localStorage.getItem(THEME_KEY) || 'dark'; } catch { return 'dark'; }
+}
+function applyTheme(t) {
+  const root = document.documentElement;
+  if (t === 'system') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', t);
+  const dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  $('meta[name="theme-color"]').setAttribute('content', dark ? '#000000' : '#ffffff');
+}
+function setTheme(t) {
+  try { localStorage.setItem(THEME_KEY, t); } catch { /* sin acceso */ }
+  applyTheme(t);
+}
+
+const svg = (d, size = 20) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const ICONS = {
+  eye: svg('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>', 18),
+  eyeOff: svg('<path d="M3 3l18 18"/><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.2M6.6 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>', 18),
+  out: svg('<path d="M7 17 17 7M8 7h9v9"/>'),
+  in: svg('<path d="M17 7 7 17M16 17H7V8"/>'),
+  swap: svg('<path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/>'),
+  flag: svg('<path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/>'),
+  chevron: svg('<path d="m9 6 6 6-6 6"/>', 16)
+};
 const pctFmt = new Intl.NumberFormat('es', { style: 'percent', maximumFractionDigits: 0 });
 const pct = x => pctFmt.format(x);
 
@@ -311,7 +341,7 @@ function insightsCard(txs, ing, gas, byCat) {
       tips.push(`Tu fondo de emergencia cubre ${((Number(ef.saved) || 0) / avg).toFixed(1)} meses de gastos. Lo ideal son 3 a 6.`);
     }
   }
-  return `<div class="card tips"><h2>💡 Consejos</h2><ul>${tips.map(t => `<li>${t}</li>`).join('')}</ul></div>`;
+  return `<div class="card tips"><h2>Consejos</h2><ul>${tips.map(t => `<li>${t}</li>`).join('')}</ul></div>`;
 }
 
 function rule503020(txs, ing) {
@@ -370,12 +400,42 @@ function renderInicio() {
   const totalBal = sum(state.accounts.map(a => balances[a.id] || 0));
   const rateCls = rate === null ? '' : rate >= 0.2 ? 'ing' : rate < 0 ? 'gas' : '';
 
+  const sign = bal > 0 ? '+' : bal < 0 ? '−' : '';
+  const quick = (type, label, icon) =>
+    `<button class="q" data-action="quick" data-type="${type}"><span class="q-ico">${icon}</span>${label}</button>`;
+
   $('#view-inicio').innerHTML = `
+    <section class="hero">
+      <div class="hero-label">Patrimonio total
+        <button class="eye" data-action="toggle-hide" aria-label="${hideAmounts ? 'Mostrar' : 'Ocultar'} montos">${hideAmounts ? ICONS.eyeOff : ICONS.eye}</button>
+      </div>
+      <div class="hero-value ${totalBal < 0 ? 'gas' : ''}">${esc(fmt(totalBal))}</div>
+      <div class="hero-sub">Balance de ${esc(monthName(currentYM, { month: 'long' }).toLowerCase())}
+        <span class="chip ${bal >= 0 ? 'chip-up' : 'chip-down'}">${sign}${esc(fmt(Math.abs(bal)))}${rate !== null && !hideAmounts ? ` · ${pct(rate)}` : ''}</span>
+      </div>
+    </section>
+    <div class="quick">
+      ${quick('gasto', 'Gasto', ICONS.out)}
+      ${quick('ingreso', 'Ingreso', ICONS.in)}
+      ${quick('transferencia', 'Transferir', ICONS.swap)}
+      <button class="q" data-action="goto" data-view="metas"><span class="q-ico">${ICONS.flag}</span>Metas</button>
+    </div>
     <div class="stats">
       ${stat('Ingresos', fmt(ing), 'ing')}
       ${stat('Gastos', fmt(gas), 'gas')}
-      ${stat('Balance', fmt(bal), bal >= 0 ? 'ing' : 'gas')}
-      ${stat('Tasa de ahorro', rate === null ? '—' : pct(rate), rateCls)}
+      ${stat('Ahorro', rate === null ? '—' : pct(rate), rateCls)}
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Mis cuentas</h2><button class="link" data-action="goto" data-view="ajustes">Gestionar ${ICONS.chevron}</button></div>
+      ${state.accounts.length ? state.accounts.map((a, i) => {
+        const v = balances[a.id] || 0;
+        const share = totalBal > 0 && v > 0 ? pct(v / totalBal) + ' del total' : '';
+        return `<div class="asset">
+          <span class="avatar" style="--c:${PALETTE[i % PALETTE.length]}">${esc((a.name || '?').trim().charAt(0).toUpperCase())}</span>
+          <div class="grow"><div class="asset-name">${esc(a.name)}</div><div class="asset-sub">${share}</div></div>
+          <div class="amt ${v < 0 ? 'gas' : ''}">${esc(fmt(v))}</div>
+        </div>`;
+      }).join('') : empty('No tienes cuentas. Agrégalas en Ajustes.')}
     </div>
     ${insightsCard(txs, ing, gas, byCat)}
     <div class="card">
@@ -386,13 +446,7 @@ function renderInicio() {
         : empty('Aún no hay gastos este mes.')}
     </div>
     <div class="card"><h2>Regla 50/30/20</h2>${rule503020(txs, ing)}</div>
-    <div class="card"><h2>Últimos 6 meses</h2>${trendChart()}</div>
-    <div class="card">
-      <div class="card-head"><h2>Cuentas</h2><b class="${totalBal >= 0 ? '' : 'gas'}">${esc(fmt(totalBal))}</b></div>
-      <div class="rows">${state.accounts.map(a => `<div class="row"><span class="grow">${esc(a.name)}</span>
-        <span class="amt ${(balances[a.id] || 0) < 0 ? 'gas' : ''}">${esc(fmt(balances[a.id] || 0))}</span></div>`).join('')
-        || empty('No tienes cuentas. Agrégalas en Ajustes.')}</div>
-    </div>`;
+    <div class="card"><h2>Últimos 6 meses</h2>${trendChart()}</div>`;
 }
 
 /* ---------- Vista: Movimientos ---------- */
@@ -433,7 +487,7 @@ function renderMovimientos() {
     }
     if (t.note) sub = `${t.note} · ${sub}`;
     return `<button class="tx" data-id="${esc(t.id)}">
-      <i class="dot" style="background:${safeColor(color)}"></i>
+      <i class="dot" style="--dot-c:${safeColor(color)}"></i>
       <div class="tx-main"><div class="tx-title">${esc(title)}</div><div class="tx-sub">${esc(sub)}</div></div>
       <div class="tx-amt ${cls}">${sign}${esc(fmt(t.amount))}</div></button>`;
   };
@@ -503,7 +557,7 @@ function renderMetas() {
   const avg = avgMonthlyExpenses();
   $('#view-metas').innerHTML = `
     <div class="card">
-      <h2>🛟 Fondo de emergencia recomendado</h2>
+      <h2>Fondo de emergencia recomendado</h2>
       ${avg > 0 ? `<p class="muted" style="margin:0 0 8px;font-size:.9rem">Gastas en promedio <b>${esc(fmt(avg))}</b> al mes (sin contar ahorro).</p>
         <div class="suggest">
           <div><small>Mínimo (1 mes)</small><b>${esc(fmt(avg))}</b></div>
@@ -555,21 +609,31 @@ function renderAjustes() {
   const user = window.Cloud?.user;
   const accountCard = user
     ? `<div class="card">
-        <div class="card-head"><h2>👤 Mi cuenta</h2><button class="btn small" data-action="logout">Cerrar sesión</button></div>
+        <div class="card-head"><h2>Mi cuenta</h2><button class="btn small" data-action="logout">Cerrar sesión</button></div>
         <div class="rows">
           ${user.displayName ? `<div class="row"><span class="grow muted">Nombre</span><span>${esc(user.displayName)}</span></div>` : ''}
           <div class="row"><span class="grow muted">Correo</span><span>${esc(user.email || '—')}</span></div>
-          <div class="row"><span class="grow muted">Datos</span><span class="ok">☁️ Sincronizados en la nube</span></div>
+          <div class="row"><span class="grow muted">Datos</span><span class="ok">Sincronizados en la nube</span></div>
         </div>
       </div>`
     : `<div class="card">
-        <h2>👤 Cuenta</h2>
+        <h2>Cuenta</h2>
         <p class="muted" style="margin:0;font-size:.88rem">Estás en <b>modo local</b>: los datos solo existen en este dispositivo.
         Para tener inicio de sesión y guardar las finanzas de varias personas en la nube, configura Firebase siguiendo el README.</p>
       </div>`;
 
+  const theme = getTheme();
+  const themeCard = `<div class="card">
+      <h2>Apariencia</h2>
+      <div class="pills">
+        ${[['dark', 'Oscuro'], ['light', 'Claro'], ['system', 'Sistema']].map(([k, v]) =>
+          `<button class="pill ${theme === k ? 'active' : ''}" data-action="theme" data-theme="${k}">${v}</button>`).join('')}
+      </div>
+    </div>`;
+
   $('#view-ajustes').innerHTML = `
     ${accountCard}
+    ${themeCard}
     <div class="card">
       <h2>Moneda</h2>
       <div class="set-row">
@@ -644,7 +708,7 @@ function syncTxForm(keep = {}) {
   fillSelect(txForm.toAccountId, state.accounts, to);
 }
 
-function openTx(tx = null) {
+function openTx(tx = null, type = 'gasto') {
   if (!state.accounts.length) {
     toast('Primero crea una cuenta en Ajustes.');
     setView('ajustes');
@@ -654,7 +718,7 @@ function openTx(tx = null) {
   txForm.reset();
   $('#txTitle').textContent = tx ? 'Editar movimiento' : 'Nuevo movimiento';
   $('#txDelete').hidden = !tx;
-  txForm.type.value = tx?.type || 'gasto';
+  txForm.type.value = tx?.type || type;
   syncTxForm(tx || {});
   txForm.amount.value = tx ? tx.amount : '';
   txForm.date.value = tx?.date || (currentYM === ymFromDate(new Date()) ? todayStr() : currentYM + '-01');
@@ -825,6 +889,14 @@ document.addEventListener('click', e => {
       state.categories = state.categories.filter(c => c.id !== id);
       save(); render();
       break;
+    case 'quick': openTx(null, btn.dataset.type); break;
+    case 'goto': setView(btn.dataset.view); break;
+    case 'toggle-hide':
+      hideAmounts = !hideAmounts;
+      try { localStorage.setItem('mf-hide', hideAmounts ? '1' : '0'); } catch { /* sin acceso */ }
+      render();
+      break;
+    case 'theme': setTheme(btn.dataset.theme); render(); break;
     case 'logout':
       if (confirm('¿Cerrar sesión en este dispositivo?')) window.Cloud?.logout();
       break;
@@ -975,6 +1047,8 @@ function loadDemo() {
 
 /* ---------- Inicio ---------- */
 
+applyTheme(getTheme());
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => applyTheme(getTheme()));
 buildFormatter();
 const VIEWS = ['inicio', 'movimientos', 'presupuesto', 'metas', 'ajustes'];
 const startView = () => setView(VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'inicio');
