@@ -94,15 +94,29 @@ function load() {
 
 let state = load();
 
+/* ---------- Libros: personal, espacios compartidos y finanzas de otros ---------- */
+let stores = { personal: state };
+let ctxKey = 'personal';
+let sharing = { me: null, spaces: [], invites: [], partners: [] };
+const isReadOnly = () => ctxKey.startsWith('user:');
+const isSpace = () => ctxKey.startsWith('space:');
+const firstName = s => String(s || '').trim().split(/[\s@]+/)[0] || '';
+
 const cloudOn = () => !!(window.Cloud && window.Cloud.user);
 const cloudFail = e => {
   console.error(e);
   toast('⚠️ No se pudo guardar en la nube' + (e?.code === 'permission-denied' ? ': sin permiso.' : '.'));
 };
 
+function guardRO() {
+  if (!isReadOnly()) return false;
+  toast('Solo lectura: no puedes modificar las finanzas de ' + firstName(currentCtx().short));
+  return true;
+}
+
 /** Guarda ajustes, cuentas, categorías y metas. */
 function save() {
-  if (cloudOn()) { window.Cloud.saveMeta(state).catch(cloudFail); return; }
+  if (cloudOn()) { if (!guardRO()) window.Cloud.saveMeta(ctxKey, state).catch(cloudFail); return; }
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) {
@@ -111,17 +125,20 @@ function save() {
 }
 /** Guarda (crea o actualiza) un movimiento. */
 function saveTx(tx) {
-  if (cloudOn()) window.Cloud.putTx(tx).catch(cloudFail);
-  else save();
+  if (cloudOn()) {
+    if (guardRO()) return;
+    if (isSpace() && !tx.createdBy) tx.createdBy = { uid: window.Cloud.uid, name: window.Cloud.myName };
+    window.Cloud.putTx(ctxKey, tx).catch(cloudFail);
+  } else save();
 }
 /** Elimina un movimiento. */
 function removeTx(id) {
-  if (cloudOn()) window.Cloud.delTx(id).catch(cloudFail);
+  if (cloudOn()) { if (!guardRO()) window.Cloud.delTx(ctxKey, id).catch(cloudFail); }
   else save();
 }
 /** Reemplaza todos los datos (importar, datos de ejemplo, borrar todo). */
 function saveAll() {
-  if (cloudOn()) return window.Cloud.replaceAll(state).catch(cloudFail);
+  if (cloudOn()) return guardRO() ? Promise.resolve() : window.Cloud.replaceAll(ctxKey, state).catch(cloudFail);
   save();
   return Promise.resolve();
 }
@@ -169,7 +186,10 @@ const ICONS = {
   in: svg('<path d="M17 7 7 17M16 17H7V8"/>'),
   swap: svg('<path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/>'),
   flag: svg('<path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/>'),
-  chevron: svg('<path d="m9 6 6 6-6 6"/>', 16)
+  chevron: svg('<path d="m9 6 6 6-6 6"/>', 16),
+  user: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>', 16),
+  users: svg('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"/>', 16),
+  eyeSm: svg('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>', 16)
 };
 const pctFmt = new Intl.NumberFormat('es', { style: 'percent', maximumFractionDigits: 0 });
 const pct = x => pctFmt.format(x);
@@ -273,12 +293,58 @@ function toast(msg) {
 
 const empty = msg => `<div class="empty">${msg}</div>`;
 
+function contexts() {
+  const list = [{ key: 'personal', short: 'Yo', label: 'Mis finanzas', kind: 'personal' }];
+  for (const sp of sharing.spaces) {
+    if (stores['space:' + sp.id]) list.push({ key: 'space:' + sp.id, short: sp.name, label: sp.name, kind: 'space', space: sp });
+  }
+  for (const p of sharing.partners) {
+    if (p.status === 'ok' && stores['user:' + p.uid]) {
+      list.push({ key: 'user:' + p.uid, short: firstName(p.name), label: 'Finanzas de ' + firstName(p.name), kind: 'partner' });
+    }
+  }
+  return list;
+}
+const currentCtx = () => contexts().find(c => c.key === ctxKey) || contexts()[0];
+
+function switchCtx(key) {
+  if (!stores[key]) { toast('Cargando…'); return; }
+  ctxKey = key;
+  state = stores[key];
+  buildFormatter();
+  document.body.classList.toggle('read-only', isReadOnly());
+  setView(currentView);
+}
+
+function renderCtxBar() {
+  const bar = $('#ctxBar'), note = $('#ctxNote');
+  if (!bar) return;
+  const list = contexts();
+  bar.hidden = list.length < 2;
+  const icon = k => k === 'space' ? ICONS.users : k === 'partner' ? ICONS.eyeSm : ICONS.user;
+  bar.innerHTML = list.map(c => `<button class="ctx ${c.key === ctxKey ? 'active' : ''}" data-action="ctx" data-key="${esc(c.key)}">${icon(c.kind)}<span>${esc(c.short)}</span></button>`).join('');
+  const c = currentCtx();
+  if (c.kind === 'partner') {
+    note.hidden = false;
+    note.className = 'ctx-note ro';
+    note.innerHTML = `${ICONS.eyeSm}<span>Estás viendo las finanzas de <b>${esc(c.short)}</b> · solo lectura</span>`;
+  } else if (c.kind === 'space') {
+    const names = c.space.members.map(m => m.me ? 'tú' : firstName(m.name || m.email)).join(', ');
+    note.hidden = false;
+    note.className = 'ctx-note shared';
+    note.innerHTML = `${ICONS.users}<span>Espacio compartido · lo ven y editan ${esc(names)}</span>`;
+  } else {
+    note.hidden = true;
+  }
+}
+
 function setView(view) {
   currentView = view;
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
   $$('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   $('#monthPicker').hidden = view === 'ajustes' || view === 'metas';
-  $('#fab').hidden = view === 'ajustes' || view === 'metas';
+  $('#fab').hidden = view === 'ajustes' || view === 'metas' || isReadOnly();
+  renderCtxBar();
   if (location.hash !== '#' + view) history.replaceState(null, '', '#' + view);
   render();
   window.scrollTo({ top: 0 });
@@ -404,9 +470,18 @@ function renderInicio() {
   const quick = (type, label, icon) =>
     `<button class="q" data-action="quick" data-type="${type}"><span class="q-ico">${icon}</span>${label}</button>`;
 
+  const c = currentCtx();
+  const heroLabel = c.kind === 'personal' ? 'Patrimonio total' : c.kind === 'space' ? `Patrimonio · ${esc(c.short)}` : `Patrimonio de ${esc(c.short)}`;
+  const invites = c.kind === 'personal' ? sharing.invites.map(i => `
+    <div class="card invite-banner">
+      <div class="grow"><b>${esc(i.from)}</b> te invitó a llevar las finanzas juntos en <b>«${esc(i.name)}»</b></div>
+      <button class="btn small primary" data-action="goto" data-view="ajustes">Ver</button>
+    </div>`).join('') : '';
+
   $('#view-inicio').innerHTML = `
+    ${invites}
     <section class="hero">
-      <div class="hero-label">Patrimonio total
+      <div class="hero-label">${heroLabel}
         <button class="eye" data-action="toggle-hide" aria-label="${hideAmounts ? 'Mostrar' : 'Ocultar'} montos">${hideAmounts ? ICONS.eyeOff : ICONS.eye}</button>
       </div>
       <div class="hero-value ${totalBal < 0 ? 'gas' : ''}">${esc(fmt(totalBal))}</div>
@@ -426,7 +501,7 @@ function renderInicio() {
       ${stat('Ahorro', rate === null ? '—' : pct(rate), rateCls)}
     </div>
     <div class="card">
-      <div class="card-head"><h2>Mis cuentas</h2><button class="link" data-action="goto" data-view="ajustes">Gestionar ${ICONS.chevron}</button></div>
+      <div class="card-head"><h2>${c.kind === 'personal' ? 'Mis cuentas' : 'Cuentas'}</h2>${isReadOnly() ? '' : `<button class="link" data-action="goto" data-view="ajustes">Gestionar ${ICONS.chevron}</button>`}</div>
       ${state.accounts.length ? state.accounts.map((a, i) => {
         const v = balances[a.id] || 0;
         const share = totalBal > 0 && v > 0 ? pct(v / totalBal) + ' del total' : '';
@@ -437,6 +512,7 @@ function renderInicio() {
         </div>`;
       }).join('') : empty('No tienes cuentas. Agrégalas en Ajustes.')}
     </div>
+    ${c.kind === 'space' ? contributionsCard(c.space, txs) : ''}
     ${insightsCard(txs, ing, gas, byCat)}
     <div class="card">
       <h2>Gastos por categoría</h2>
@@ -447,6 +523,21 @@ function renderInicio() {
     </div>
     <div class="card"><h2>Regla 50/30/20</h2>${rule503020(txs, ing)}</div>
     <div class="card"><h2>Últimos 6 meses</h2>${trendChart()}</div>`;
+}
+
+/** Cuánto registró cada integrante del espacio este mes. */
+function contributionsCard(sp, txs) {
+  const rows = sp.members.map((m, i) => {
+    const mine = txs.filter(t => t.createdBy?.uid === m.uid);
+    const t = totals(mine);
+    const name = m.me ? 'Tú' : firstName(m.name || m.email);
+    return `<div class="asset">
+      <span class="avatar" style="--c:${PALETTE[(i + 3) % PALETTE.length]}">${esc(name.charAt(0).toUpperCase())}</span>
+      <div class="grow"><div class="asset-name">${esc(name)}</div><div class="asset-sub">${mine.length} movimiento${mine.length === 1 ? '' : 's'}</div></div>
+      <div class="contrib"><span class="ing">+${esc(fmt(t.ing))}</span><span class="gas">−${esc(fmt(t.gas))}</span></div>
+    </div>`;
+  }).join('');
+  return `<div class="card"><h2>Aportes del mes</h2>${rows}</div>`;
 }
 
 /* ---------- Vista: Movimientos ---------- */
@@ -486,6 +577,7 @@ function renderMovimientos() {
       color = c?.color;
     }
     if (t.note) sub = `${t.note} · ${sub}`;
+    if (isSpace() && t.createdBy) sub += ` · ${t.createdBy.uid === window.Cloud?.uid ? 'tú' : firstName(t.createdBy.name)}`;
     return `<button class="tx" data-id="${esc(t.id)}">
       <i class="dot" style="--dot-c:${safeColor(color)}"></i>
       <div class="tx-main"><div class="tx-title">${esc(title)}</div><div class="tx-sub">${esc(sub)}</div></div>
@@ -541,7 +633,7 @@ function renderPresupuesto() {
             <span class="name">${esc(s.cat.name)}</span>
             <span class="tag">${GROUPS[s.cat.group] || 'Gusto'}</span>
             <input type="number" min="0" step="0.01" inputmode="decimal" data-budget="${esc(s.cat.id)}"
-              value="${s.budget || ''}" placeholder="0" aria-label="Presupuesto de ${esc(s.cat.name)}">
+              value="${s.budget || ''}" placeholder="0" aria-label="Presupuesto de ${esc(s.cat.name)}" ${isReadOnly() ? 'disabled' : ''}>
           </div>
           ${s.budget > 0 ? `<div class="bar"><div class="fill ${cls}" style="width:${Math.min(100, p * 100)}%"></div></div>
             <small>Gastado ${esc(fmt(s.spent))} de ${esc(fmt(s.budget))} · ${left >= 0 ? `quedan ${esc(fmt(left))}` : `<span class="bad">excedido por ${esc(fmt(-left))}</span>`}</small>`
@@ -631,9 +723,25 @@ function renderAjustes() {
       </div>
     </div>`;
 
+  const c = currentCtx();
+  const ledgerTitle = c.kind === 'space'
+    ? `<div class="card ledger-note">${ICONS.users}<div>Estás editando <b>«${esc(c.short)}»</b>. Los cambios de moneda, cuentas y categorías aplican para todos sus integrantes.</div></div>`
+    : '';
+
+  if (c.kind === 'partner') {
+    $('#view-ajustes').innerHTML = `
+      ${accountCard}
+      ${sharingCard()}
+      ${themeCard}
+      <div class="card ledger-note">${ICONS.eyeSm}<div>Estás viendo las finanzas de <b>${esc(c.short)}</b> en modo solo lectura. Para cambiar sus ajustes debe hacerlo esa persona.</div></div>`;
+    return;
+  }
+
   $('#view-ajustes').innerHTML = `
     ${accountCard}
+    ${sharingCard()}
     ${themeCard}
+    ${ledgerTitle}
     <div class="card">
       <h2>Moneda</h2>
       <div class="set-row">
@@ -675,11 +783,71 @@ function renderAjustes() {
         <button class="btn" data-action="export-json">⬇️ Exportar respaldo</button>
         <button class="btn" data-action="import-json">⬆️ Importar respaldo</button>
         <button class="btn" data-action="export-csv">📊 Exportar a Excel (CSV)</button>
-        <button class="btn" data-action="demo">🧪 Cargar datos de ejemplo</button>
+        ${c.kind === 'personal' ? '<button class="btn" data-action="demo">🧪 Cargar datos de ejemplo</button>' : ''}
         <button class="btn danger" data-action="reset">🗑️ Borrar todo</button>
       </div>
     </div>
     <p class="muted" style="text-align:center;font-size:.8rem">RayFin · ${state.transactions.length} movimientos guardados</p>`;
+}
+
+/** Tarjeta para invitar, aceptar invitaciones y gestionar espacios compartidos. */
+function sharingCard() {
+  if (!window.Cloud?.user) {
+    return CLOUD_ENABLED ? '' : `<div class="card"><h2>Finanzas compartidas</h2>
+      <p class="muted" style="margin:0;font-size:.88rem">Para compartir finanzas con tu pareja necesitas el modo con cuentas (Firebase).</p></div>`;
+  }
+  const appUrl = location.origin + location.pathname;
+  const inv = sharing.invites.map(i => `
+    <div class="share-block invite">
+      <div><b>${esc(i.from)}</b> te invitó a <b>«${esc(i.name)}»</b></div>
+      <label class="check"><input type="checkbox" id="share-inv-${esc(i.id)}" checked><span>Que también pueda ver mis finanzas personales (solo lectura)</span></label>
+      <div class="row-actions">
+        <button class="btn small primary" data-action="accept-invite" data-id="${esc(i.id)}">Aceptar</button>
+        <button class="btn small ghost" data-action="decline-invite" data-id="${esc(i.id)}">Rechazar</button>
+      </div>
+    </div>`).join('');
+
+  const spaces = sharing.spaces.map(sp => {
+    const others = sp.members.filter(m => !m.me);
+    const status = others.map(m => {
+      const p = sharing.partners.find(x => x.uid === m.uid);
+      const n = esc(firstName(m.name || m.email));
+      if (p?.status === 'ok') return `<div class="share-status ok">${ICONS.eyeSm}<span>${n} comparte contigo sus finanzas personales</span><button class="link" data-action="ctx" data-key="user:${esc(m.uid)}">Ver</button></div>`;
+      if (p?.status === 'denied') return `<div class="share-status">${ICONS.eyeSm}<span>${n} no comparte sus finanzas personales</span></div>`;
+      return '';
+    }).join('');
+    const pending = sp.invitedEmails.map(e => {
+      const msg = encodeURIComponent(`Te invité a RayFin para llevar nuestras finanzas juntos 💸\nEntra con este correo: ${e}\n${appUrl}`);
+      return `<div class="member pending"><span class="grow">${esc(e)} · <i>pendiente</i></span>
+        <a class="btn small ghost" target="_blank" rel="noopener" href="https://wa.me/?text=${msg}">Avisar por WhatsApp</a>
+        <button class="icon-btn" data-action="cancel-invite" data-id="${esc(sp.id)}" data-email="${esc(e)}" aria-label="Cancelar invitación">✕</button></div>`;
+    }).join('');
+    return `<div class="share-block">
+      <div class="space-head"><b>${ICONS.users} ${esc(sp.name)}</b>
+        <button class="btn small" data-action="ctx" data-key="space:${esc(sp.id)}">Abrir</button></div>
+      <div class="members">${sp.members.map((m, i) => `<span class="chip-member"><span class="avatar sm" style="--c:${PALETTE[(i + 3) % PALETTE.length]}">${esc((m.me ? 'T' : (m.name || m.email || '?')).charAt(0).toUpperCase())}</span>${esc(m.me ? 'Tú' : firstName(m.name || m.email))}</span>`).join('')}</div>
+      ${pending}
+      ${status}
+      <label class="check"><input type="checkbox" data-share-space="${esc(sp.id)}" ${sp.iShare ? 'checked' : ''}><span>Los integrantes pueden ver mis finanzas personales (solo lectura)</span></label>
+      <div class="inline-form">
+        <input type="email" id="inv-${esc(sp.id)}" placeholder="Invitar a otro correo" autocomplete="off">
+        <button class="btn small" data-action="invite-more" data-id="${esc(sp.id)}">Invitar</button>
+      </div>
+      <button class="link danger-link" data-action="leave-space" data-id="${esc(sp.id)}">Salir de este espacio</button>
+    </div>`;
+  }).join('');
+
+  const create = `
+    <div class="share-block create">
+      <div class="subhead" style="margin-top:0">${sharing.spaces.length ? 'Nuevo espacio compartido' : 'Lleva las finanzas en pareja'}</div>
+      ${sharing.spaces.length ? '' : '<p class="muted" style="margin:0 0 10px;font-size:.88rem">Crea un espacio para registrar juntos los gastos e ingresos comunes. Tus finanzas personales siguen siendo tuyas.</p>'}
+      <input type="text" id="newSpaceName" placeholder="Nombre del espacio (ej: Casa)" maxlength="40" autocomplete="off">
+      <input type="email" id="newSpaceEmail" placeholder="Correo de tu pareja (con el que entra a RayFin)" autocomplete="off">
+      <label class="check"><input type="checkbox" id="newSpaceShare" checked><span>Que pueda ver mis finanzas personales (solo lectura)</span></label>
+      <button class="btn primary" data-action="create-space">Crear e invitar</button>
+    </div>`;
+
+  return `<div class="card" id="sharingCard"><h2>Finanzas compartidas</h2>${inv}${spaces}${create}</div>`;
 }
 
 /* ---------- Diálogo de movimientos ---------- */
@@ -754,7 +922,8 @@ txForm.addEventListener('submit', e => {
   let record;
   if (editingTxId) {
     const i = state.transactions.findIndex(t => t.id === editingTxId);
-    record = { id: editingTxId, createdAt: state.transactions[i]?.createdAt || Date.now(), ...data };
+    const old = state.transactions[i];
+    record = { id: editingTxId, createdAt: old?.createdAt || Date.now(), ...(old?.createdBy ? { createdBy: old.createdBy } : {}), ...data };
     if (i >= 0) state.transactions[i] = record; else state.transactions.push(record);
   } else {
     record = { id: uid(), createdAt: Date.now(), ...data };
@@ -846,7 +1015,11 @@ document.addEventListener('click', e => {
   if (tab) { setView(tab.dataset.view); return; }
 
   const txBtn = e.target.closest('.tx');
-  if (txBtn) { openTx(state.transactions.find(t => t.id === txBtn.dataset.id)); return; }
+  if (txBtn) {
+    if (isReadOnly()) { toast('Solo lectura: son las finanzas de ' + currentCtx().short); return; }
+    openTx(state.transactions.find(t => t.id === txBtn.dataset.id));
+    return;
+  }
 
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
@@ -890,6 +1063,47 @@ document.addEventListener('click', e => {
       save(); render();
       break;
     case 'quick': openTx(null, btn.dataset.type); break;
+    case 'ctx': switchCtx(btn.dataset.key); break;
+    case 'create-space': {
+      const name = $('#newSpaceName').value.trim() || 'Casa';
+      const email = $('#newSpaceEmail').value.trim().toLowerCase();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast('Escribe un correo válido.'); break; }
+      if (email === (window.Cloud.user.email || '').toLowerCase()) { toast('Ese es tu propio correo.'); break; }
+      btn.disabled = true;
+      window.Cloud.createSpace({ name, email, share: $('#newSpaceShare').checked })
+        .then(() => toast('Espacio creado. Avísale que entre a RayFin con ' + email))
+        .catch(err => { btn.disabled = false; cloudFail(err); });
+      break;
+    }
+    case 'invite-more': {
+      const input = $('#inv-' + id);
+      const email = input.value.trim().toLowerCase();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast('Escribe un correo válido.'); break; }
+      window.Cloud.invite(id, email).then(() => toast('Invitación enviada a ' + email)).catch(cloudFail);
+      break;
+    }
+    case 'cancel-invite':
+      window.Cloud.cancelInvite(id, btn.dataset.email).catch(cloudFail);
+      break;
+    case 'accept-invite': {
+      const share = $('#share-inv-' + id)?.checked;
+      btn.disabled = true;
+      window.Cloud.acceptInvite(id, !!share)
+        .then(() => toast('¡Listo! Ya comparten este espacio'))
+        .catch(err => { btn.disabled = false; cloudFail(err); });
+      break;
+    }
+    case 'decline-invite':
+      if (confirm('¿Rechazar esta invitación?')) window.Cloud.declineInvite(id).catch(cloudFail);
+      break;
+    case 'leave-space': {
+      const sp = sharing.spaces.find(x => x.id === id);
+      const last = sp && sp.members.length <= 1;
+      if (!confirm(last ? 'Eres el único integrante: el espacio y sus movimientos se borrarán. ¿Continuar?' : '¿Salir de este espacio? Dejarás de ver sus movimientos.')) break;
+      if (ctxKey === 'space:' + id) switchCtx('personal');
+      window.Cloud.leaveSpace(id).then(() => toast('Saliste del espacio')).catch(cloudFail);
+      break;
+    }
     case 'goto': setView(btn.dataset.view); break;
     case 'toggle-hide':
       hideAmounts = !hideAmounts;
@@ -926,6 +1140,16 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   const t = e.target;
   const d = t.dataset;
+  if (d.shareSpace) {
+    window.Cloud?.setShare(d.shareSpace, t.checked)
+      .then(() => toast(t.checked ? 'Ahora pueden ver tus finanzas personales' : 'Dejaste de compartir tus finanzas personales'))
+      .catch(cloudFail);
+    return;
+  }
+  if (isReadOnly() && (d.budget || d.accName || d.accInitial || d.catName || d.catGroup || d.catColor || t.id === 'currencyInput')) {
+    guardRO();
+    return;
+  }
   if (d.budget) {
     const c = catById(d.budget);
     if (c) c.budget = Math.max(0, round2(t.value));
@@ -1064,11 +1288,35 @@ window.App = {
   readLocal,
   clearLocal() { try { localStorage.removeItem(STORAGE_KEY); } catch { /* sin acceso */ } },
   toast,
-  /** Reemplaza el estado con datos llegados de la nube. */
-  setState(s) {
-    state = normalize(s);
-    buildFormatter();
-    if (appStarted) render();
+  get stores() { return stores; },
+  /** Datos de un libro llegados de la nube (personal, space:ID o user:UID). */
+  setStore(key, data) {
+    stores[key] = normalize(data);
+    if (key === ctxKey) {
+      state = stores[key];
+      buildFormatter();
+      if (appStarted) render();
+    }
+    if (appStarted) renderCtxBar();
+  },
+  setState(s) { this.setStore('personal', s); },
+  /** Un libro dejó de estar disponible (se salió del espacio o dejaron de compartir). */
+  dropStore(key) {
+    delete stores[key];
+    if (key === ctxKey) {
+      if (appStarted) { switchCtx('personal'); toast('Ya no tienes acceso a esas finanzas'); }
+      else { ctxKey = 'personal'; state = stores.personal; }
+    } else if (appStarted) renderCtxBar();
+  },
+  /** Espacios, invitaciones y personas que comparten contigo. */
+  setSharing(info) {
+    sharing = info;
+    if (!appStarted) return;
+    if (!contexts().some(c => c.key === ctxKey)) { switchCtx('personal'); return; }
+    renderCtxBar();
+    // No redibujar Ajustes si la persona está escribiendo ahí
+    const typing = currentView === 'ajustes' && document.activeElement?.matches?.('#sharingCard input');
+    if (!typing && (currentView === 'ajustes' || currentView === 'inicio')) render();
   },
   /** Muestra la app tras iniciar sesión. */
   enter() {

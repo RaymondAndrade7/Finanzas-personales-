@@ -1,7 +1,10 @@
 rules_version = '2';
 
-// Reglas de seguridad de la base de datos.
-// Cada persona solo puede leer y escribir SUS propios datos.
+// Reglas de seguridad de RayFin.
+// - Cada persona lee y escribe SUS propias finanzas.
+// - Puede dejar que otras personas las LEAN (campo `viewers`), nunca que las modifiquen.
+// - Los espacios compartidos solo los leen y editan sus integrantes.
+// - Solo quien fue invitado (por su correo) puede unirse a un espacio.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -22,19 +25,86 @@ service cloud.firestore {
     }
     // ----------------------------------------------------------------------
 
+    function signedIn() {
+      return request.auth != null && allowAnyone();
+    }
     function isOwner(uid) {
-      return request.auth != null && request.auth.uid == uid && allowAnyone();
+      return signedIn() && request.auth.uid == uid;
+    }
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+    function validTx() {
+      return request.resource.data.amount is number
+        && request.resource.data.amount > 0
+        && request.resource.data.date is string;
     }
 
+    // ---------- Finanzas personales ----------
     match /users/{uid} {
-      allow read, write: if isOwner(uid);
+      function canView() {
+        let path = /databases/$(database)/documents/users/$(uid);
+        return signedIn() && exists(path) && request.auth.uid in get(path).data.get('viewers', []);
+      }
+
+      allow read: if isOwner(uid) || (signedIn() && request.auth.uid in resource.data.get('viewers', []));
+      allow write: if isOwner(uid);
 
       match /transactions/{txId} {
-        allow read, delete: if isOwner(uid);
-        allow create, update: if isOwner(uid)
-          && request.resource.data.amount is number
-          && request.resource.data.amount > 0
-          && request.resource.data.date is string;
+        allow read: if isOwner(uid) || canView();
+        allow delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && validTx();
+      }
+    }
+
+    // ---------- Espacios compartidos ----------
+    match /spaces/{spaceId} {
+      function isMember(data) {
+        return signedIn() && request.auth.uid in data.members;
+      }
+      function isInvited(data) {
+        return signedIn() && request.auth.token.email != null && myEmail() in data.get('invitedEmails', []);
+      }
+      function changedOnly(keys) {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+      }
+
+      // (si aún no existe no hay nada que leer)
+      allow read: if signedIn() && (resource == null || isMember(resource.data) || isInvited(resource.data));
+
+      allow create: if signedIn()
+        && request.resource.data.members == [request.auth.uid]
+        && request.resource.data.createdBy == request.auth.uid;
+
+      allow update: if
+        // Un integrante edita el espacio (sin cambiar quiénes son miembros)
+        (isMember(resource.data)
+          && request.resource.data.members == resource.data.members
+          && request.resource.data.createdBy == resource.data.createdBy)
+        // Un integrante sale del espacio
+        || (isMember(resource.data)
+          && request.resource.data.members == resource.data.members.removeAll([request.auth.uid])
+          && changedOnly(['members', 'memberInfo', 'sharedPersonal', 'updatedAt']))
+        // La persona invitada acepta (se agrega solo a sí misma)
+        || (isInvited(resource.data) && !isMember(resource.data)
+          && request.resource.data.members == resource.data.members.concat([request.auth.uid])
+          && request.resource.data.invitedEmails == resource.data.invitedEmails.removeAll([myEmail()])
+          && changedOnly(['members', 'invitedEmails', 'memberInfo', 'sharedPersonal', 'updatedAt']))
+        // La persona invitada rechaza
+        || (isInvited(resource.data) && !isMember(resource.data)
+          && request.resource.data.invitedEmails == resource.data.invitedEmails.removeAll([myEmail()])
+          && changedOnly(['invitedEmails']));
+
+      // Se borra cuando sale el último integrante
+      allow delete: if isMember(resource.data) && resource.data.members.size() == 1;
+
+      match /transactions/{txId} {
+        function member() {
+          let path = /databases/$(database)/documents/spaces/$(spaceId);
+          return signedIn() && exists(path) && request.auth.uid in get(path).data.members;
+        }
+        allow read, delete: if member();
+        allow create, update: if member() && validTx();
       }
     }
   }

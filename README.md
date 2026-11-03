@@ -85,6 +85,18 @@ python3 -m http.server 8000
 # abre http://localhost:8000/?emulador
 ```
 
+## 👥 Finanzas compartidas (pareja, familia, roommates)
+
+Requiere el modo con cuentas (Firebase).
+
+- **Espacio compartido:** en **Ajustes → Finanzas compartidas** creas un espacio (por ejemplo *Casa*) e invitas a otra persona con el **correo con el que entra a RayFin**. Al abrir la app, esa persona verá la invitación y podrá aceptarla.
+- En el espacio **todos los integrantes registran y editan** movimientos, presupuestos y metas. Cada movimiento muestra **quién lo registró**, y el inicio muestra los **aportes del mes** de cada uno.
+- **Ver las finanzas personales del otro:** al crear o aceptar el espacio puedes marcar *"Que pueda ver mis finanzas personales"*. Es **solo lectura**: nadie puede modificar tus finanzas personales, y puedes dejar de compartirlas cuando quieras.
+- Arriba de la app aparece un selector para cambiar entre **Yo · Casa · (la otra persona)**.
+- La app no envía correos: después de invitar, avísale a la otra persona (hay un botón para hacerlo por WhatsApp).
+
+> **Importante:** si ya tenías RayFin configurado, vuelve a copiar el contenido de `firestore.rules` en **Firestore → Reglas → Publicar**. Sin las reglas nuevas, compartir no funciona.
+
 ## ⚠️ Sobre tus datos
 - **Modo local:** los datos se guardan en el navegador del dispositivo y no se envían a ningún servidor. Si borras los datos del navegador, se pierden: usa **Ajustes → Exportar respaldo** de vez en cuando.
 - **Modo con cuentas:** los datos están en tu proyecto de Firebase (Google Cloud) y solo los puede leer su dueño. Igual puedes exportar un respaldo cuando quieras.
