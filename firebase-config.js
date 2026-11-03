@@ -10,12 +10,12 @@
    de firestore.rules. Ver README, sección "Inicio de sesión".
    ========================================================= */
 window.FIREBASE_CONFIG = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  storageBucket: '',
-  messagingSenderId: '',
-  appId: ''
+  apiKey: 'AIzaSyDze9zZVzLMrVswtQJ_-yGR8cu3c1rM42E',
+  authDomain: 'finanzas-648d8.firebaseapp.com',
+  projectId: 'finanzas-648d8',
+  storageBucket: 'finanzas-648d8.firebasestorage.app',
+  messagingSenderId: '1023723021603',
+  appId: '1:1023723021603:web:e2072dcab2818ac6e99896'
 };
 
 window.APP_OPTIONS = {
