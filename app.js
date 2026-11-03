@@ -1476,6 +1476,53 @@ const txDialog = $('#txDialog');
 const txForm = $('#txForm');
 let editingTxId = null;
 let editingRecId = null; // editando un pago fijo (plantilla), no un movimiento
+let catTouched = false;   // la persona eligió la categoría a mano
+
+/** Lo que más se registra (últimos 120 días): para llenar el formulario con un toque. */
+function recentCombos(limit = 6) {
+  const since = new Date(); since.setDate(since.getDate() - 120);
+  const from = ymFromDate(since) + '-01';
+  const map = new Map();
+  for (const t of state.transactions) {
+    if (t.date < from || t.type === 'transferencia' || !t.categoryId) continue;
+    const key = [t.type, t.categoryId, t.accountId, (t.note || '').trim().toLowerCase()].join('|');
+    const e = map.get(key) || { n: 0, last: null };
+    e.n++;
+    if (!e.last || t.date >= e.last.date) e.last = t;
+    map.set(key, e);
+  }
+  return [...map.values()].filter(e => e.n >= 2 || map.size <= limit)
+    .sort((a, b) => b.n - a.n || b.last.date.localeCompare(a.last.date)).slice(0, limit).map(e => e.last);
+}
+
+/** Categoría que se suele usar con una nota parecida. */
+function suggestCategory(type, note) {
+  const q = note.trim().toLowerCase();
+  if (q.length < 3) return null;
+  const count = new Map();
+  for (const t of state.transactions) {
+    if (t.type !== type || !t.categoryId || !t.note) continue;
+    const n = t.note.trim().toLowerCase();
+    if (n.startsWith(q) || q.startsWith(n) || n.split(/\s+/).some(w => w.length >= 3 && w.startsWith(q))) {
+      count.set(t.categoryId, (count.get(t.categoryId) || 0) + 1);
+    }
+  }
+  let best = null, max = 0;
+  for (const [id, n] of count) if (n > max) { best = id; max = n; }
+  return best;
+}
+
+function renderRecents() {
+  const box = $('#txRecents');
+  if (editingTxId || editingRecId) { box.innerHTML = ''; return; }
+  const list = recentCombos();
+  box.innerHTML = list.length ? `<div class="recents-label">Recientes</div><div class="recents-row">${list.map(t => {
+    const c = catById(t.categoryId);
+    return `<button type="button" class="recent ${t.type}" data-recent="${esc(t.id)}">
+      <i class="dot" style="background:${safeColor(c?.color)}"></i>
+      <span>${esc(t.note || c?.name || '')}</span><b>${esc(fmtC(t.amount, accCur(state, t.accountId)))}</b></button>`;
+  }).join('')}</div>` : '';
+}
 let lastAccountId = null;
 
 function fillSelect(sel, items, selected) {
@@ -1546,16 +1593,24 @@ function openTx(tx = null, type = 'gasto', rec = null) {
   $('#autoField').hidden = !txForm.repeat.value;
   $('#dateLabel').textContent = rec ? 'Próxima fecha' : 'Fecha';
   if (rec) { $('#txTitle').textContent = 'Editar pago fijo'; $('#txDelete').hidden = true; }
+  catTouched = !!tx;
+  $('#txDuplicate').hidden = !editingTxId;
+  renderRecents();
   txDialog.showModal();
   if (!tx) setTimeout(() => txForm.amount.focus(), 50);
 }
 
 txForm.addEventListener('change', e => {
+  if (e.target.name === 'categoryId') catTouched = true;
   if (e.target.name === 'repeat') $('#autoField').hidden = !txForm.repeat.value;
   if (e.target.name === 'type') syncTxForm({ accountId: txForm.accountId.value });
   else if (['accountId', 'toAccountId'].includes(e.target.name)) { txForm.toAmount.dataset.touched = ''; updateAmountHints(); }
 });
 txForm.addEventListener('input', e => {
+  if (e.target.name === 'note' && !catTouched && txForm.type.value !== 'transferencia') {
+    const id = suggestCategory(txForm.type.value, e.target.value);
+    if (id && [...txForm.categoryId.options].some(o => o.value === id)) txForm.categoryId.value = id;
+  }
   if (e.target.name === 'amount') updateAmountHints();
   if (e.target.name === 'toAmount') txForm.toAmount.dataset.touched = '1';
 });
@@ -1635,6 +1690,39 @@ txForm.addEventListener('submit', e => {
   if (ym !== currentYM) currentYM = ym;
   render();
   toast(editingTxId ? 'Movimiento actualizado' : freq ? `Guardado y programado: ${REC_FREQ[freq].toLowerCase()} ✓` : 'Movimiento guardado ✓');
+});
+
+// Un toque en "Recientes" llena el formulario
+$('#txRecents').addEventListener('click', e => {
+  const b = e.target.closest('[data-recent]');
+  if (!b) return;
+  const t = state.transactions.find(x => x.id === b.dataset.recent);
+  if (!t) return;
+  txForm.type.value = t.type;
+  syncTxForm({ categoryId: t.categoryId, accountId: t.accountId });
+  catTouched = true;
+  txForm.note.value = t.note || '';
+  txForm.amount.value = t.amount;
+  updateAmountHints();
+  txForm.amount.focus();
+  txForm.amount.select?.();
+});
+
+// Duplicar: el mismo movimiento con la fecha de hoy
+$('#txDuplicate').addEventListener('click', () => {
+  const t = state.transactions.find(x => x.id === editingTxId);
+  if (!t) return;
+  txDialog.close();
+  const { id, createdAt, recurringId, createdBy, ...copy } = t;
+  openTx(null, t.type);
+  txForm.type.value = t.type;
+  syncTxForm(copy);
+  catTouched = true;
+  txForm.amount.value = t.amount;
+  txForm.note.value = t.note || '';
+  txForm.date.value = todayStr();
+  $('#txTitle').textContent = 'Duplicar movimiento';
+  updateAmountHints();
 });
 
 $('#txDelete').addEventListener('click', () => {
