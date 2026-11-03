@@ -1,5 +1,5 @@
 /* =========================================================
-   Mis Finanzas — inicio de sesión y base de datos (Firebase)
+   RayFin — inicio de sesión y base de datos (Firebase)
    Solo se activa si firebase-config.js tiene la configuración.
 
    Estructura en Firestore:

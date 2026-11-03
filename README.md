@@ -1,4 +1,4 @@
-# 💰 Mis Finanzas
+# RayFin
 
 App personal para llevar tus finanzas: registra ingresos y gastos, controla tu presupuesto, sigue tus metas de ahorro y recibe consejos según tus números.
 

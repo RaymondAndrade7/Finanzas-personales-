@@ -564,3 +564,8 @@ body.auth-mode { padding-bottom: 0; background: #030303; }
 @media (prefers-reduced-motion: reduce) {
   .auth-glow span, .grad, .ticker-track, .auth-card, .auth-card form .btn.primary::after { animation: none !important; }
 }
+
+/* ---------- Marca RayFin ---------- */
+.brand b, .auth-brand b { font-weight: inherit; color: var(--accent); }
+.auth-brand b { color: #c8f031; }
+.brand span, .auth-brand span { letter-spacing: -0.02em; }

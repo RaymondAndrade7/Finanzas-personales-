@@ -1,7 +1,7 @@
 // Service worker: permite usar la app sin conexión.
-const CACHE = 'mis-finanzas-v6';
+const CACHE = 'rayfin-v1';
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './cloud.js', './auth-bg.js', './firebase-config.js', './manifest.json',
-  './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png'];
+  './icons/rayfin.svg', './icons/rayfin-180.png', './icons/rayfin-192.png', './icons/rayfin-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));

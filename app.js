@@ -1,11 +1,11 @@
 'use strict';
 
 /* =========================================================
-   Mis Finanzas — app personal de finanzas
+   RayFin — app personal de finanzas
    Todo se guarda en el navegador (localStorage).
    ========================================================= */
 
-const STORAGE_KEY = 'mis-finanzas-v1';
+const STORAGE_KEY = 'mis-finanzas-v1'; // no cambiar: aquí están los datos guardados
 
 // Modo nube: se activa si firebase-config.js tiene datos (o con ?emulador en localhost para pruebas).
 const EMULATOR = new URLSearchParams(location.search).has('emulador') &&
@@ -679,7 +679,7 @@ function renderAjustes() {
         <button class="btn danger" data-action="reset">🗑️ Borrar todo</button>
       </div>
     </div>
-    <p class="muted" style="text-align:center;font-size:.8rem">Mis Finanzas · ${state.transactions.length} movimientos guardados</p>`;
+    <p class="muted" style="text-align:center;font-size:.8rem">RayFin · ${state.transactions.length} movimientos guardados</p>`;
 }
 
 /* ---------- Diálogo de movimientos ---------- */
@@ -901,7 +901,7 @@ document.addEventListener('click', e => {
       if (confirm('¿Cerrar sesión en este dispositivo?')) window.Cloud?.logout();
       break;
     case 'export-json':
-      download(`mis-finanzas-respaldo-${todayStr()}.json`, JSON.stringify(state, null, 2), 'application/json');
+      download(`rayfin-respaldo-${todayStr()}.json`, JSON.stringify(state, null, 2), 'application/json');
       break;
     case 'import-json':
       $('#importFile').click();
@@ -1002,7 +1002,7 @@ function exportCSV() {
       return [t.date, t.type, c?.name || '', c?.group ? GROUPS[c.group] : '', accById(t.accountId)?.name || '',
         accById(t.toAccountId)?.name || '', t.amount.toFixed(2), t.note || ''].map(q).join(',');
     });
-  download(`mis-finanzas-${todayStr()}.csv`, '﻿' + [head.join(','), ...rows].join('\n'), 'text/csv;charset=utf-8');
+  download(`rayfin-${todayStr()}.csv`, '﻿' + [head.join(','), ...rows].join('\n'), 'text/csv;charset=utf-8');
 }
 
 /* ---------- Datos de ejemplo ---------- */
