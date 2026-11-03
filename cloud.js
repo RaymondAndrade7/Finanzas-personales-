@@ -502,6 +502,10 @@ async function startSession(A, F, auth, db, user) {
     invite: (spaceId, email) => F.updateDoc(F.doc(db, 'spaces', spaceId), { invitedEmails: F.arrayUnion(cleanEmail(email)) }),
     cancelInvite: (spaceId, email) => F.updateDoc(F.doc(db, 'spaces', spaceId), { invitedEmails: F.arrayRemove(email) }),
     async acceptInvite(spaceId, share) {
+      // Solo quien demostró que el correo es suyo puede unirse
+      if (!auth.currentUser.emailVerified) await auth.currentUser.reload();
+      if (!auth.currentUser.emailVerified) throw Object.assign(new Error('Correo sin verificar'), { code: 'needs-verification' });
+      await auth.currentUser.getIdToken(true);
       await F.updateDoc(F.doc(db, 'spaces', spaceId), {
         members: F.arrayUnion(me),
         invitedEmails: F.arrayRemove(myEmail),
@@ -510,6 +514,7 @@ async function startSession(A, F, auth, db, user) {
       });
       if (share) await setShare(spaceId, true);
     },
+    sendVerification: () => A.sendEmailVerification(auth.currentUser),
     declineInvite: spaceId => F.updateDoc(F.doc(db, 'spaces', spaceId), { invitedEmails: F.arrayRemove(myEmail) }),
     setShare,
     renameSpace: (spaceId, name) => F.updateDoc(F.doc(db, 'spaces', spaceId), { name }),

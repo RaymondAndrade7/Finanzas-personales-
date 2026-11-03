@@ -85,8 +85,9 @@ service cloud.firestore {
         || (isMember(resource.data)
           && request.resource.data.members == resource.data.members.removeAll([request.auth.uid])
           && changedOnly(['members', 'memberInfo', 'sharedPersonal', 'updatedAt']))
-        // La persona invitada acepta (se agrega solo a sí misma)
+        // La persona invitada acepta (se agrega solo a sí misma) — con el correo verificado
         || (isInvited(resource.data) && !isMember(resource.data)
+          && request.auth.token.email_verified == true
           && request.resource.data.members == resource.data.members.concat([request.auth.uid])
           && request.resource.data.invitedEmails == resource.data.invitedEmails.removeAll([myEmail()])
           && changedOnly(['members', 'invitedEmails', 'memberInfo', 'sharedPersonal', 'updatedAt']))

@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="styles.css?v=20261104l">
+  <link rel="stylesheet" href="styles.css?v=20261104o">
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 </head>
 <body class="splash-on">
@@ -234,6 +234,26 @@
     </form>
   </dialog>
 
+  <!-- Pantalla de bloqueo -->
+  <div id="lockScreen" class="lock" hidden>
+    <div class="lock-inner">
+      <div class="lock-ray" id="lockRay"></div>
+      <h2>RayFin está bloqueado</h2>
+      <button type="button" class="btn primary" id="lockBio">Desbloquear con huella / Face ID</button>
+      <div id="lockPin">
+        <div class="pin-dots" id="pinDots"></div>
+        <div class="keypad">
+          <button type="button" data-pin="1">1</button><button type="button" data-pin="2">2</button><button type="button" data-pin="3">3</button>
+          <button type="button" data-pin="4">4</button><button type="button" data-pin="5">5</button><button type="button" data-pin="6">6</button>
+          <button type="button" data-pin="7">7</button><button type="button" data-pin="8">8</button><button type="button" data-pin="9">9</button>
+          <span></span><button type="button" data-pin="0">0</button><button type="button" data-pin="del" aria-label="Borrar">⌫</button>
+        </div>
+      </div>
+      <p class="lock-msg" id="lockMsg" role="alert"></p>
+      <button type="button" class="link-btn" id="lockForgot">¿Olvidaste tu PIN o no funciona la huella?</button>
+    </div>
+  </div>
+
   <!-- Bienvenida guiada -->
   <dialog id="welcomeDialog" class="welcome-dialog">
     <div class="welcome" id="welcomeBody"></div>
@@ -331,16 +351,17 @@
   <input type="file" id="importFile" accept="application/json,.json" hidden>
   <div id="toast" role="status" aria-live="polite"></div>
 
-  <script src="firebase-config.js?v=20261104l"></script>
-  <script src="fijos.js?v=20261104l"></script>
-  <script src="deudas.js?v=20261104l"></script>
-  <script src="pareja.js?v=20261104l"></script>
-  <script src="reportes.js?v=20261104l"></script>
-  <script src="bienvenida.js?v=20261104l"></script>
-  <script src="ray.js?v=20261104l"></script>
-  <script src="app.js?v=20261104l"></script>
-  <script src="auth-bg.js?v=20261104l"></script>
-  <script src="splash.js?v=20261104l"></script>
-  <script type="module" src="cloud.js?v=20261104l"></script>
+  <script src="firebase-config.js?v=20261104o"></script>
+  <script src="fijos.js?v=20261104o"></script>
+  <script src="deudas.js?v=20261104o"></script>
+  <script src="pareja.js?v=20261104o"></script>
+  <script src="reportes.js?v=20261104o"></script>
+  <script src="bienvenida.js?v=20261104o"></script>
+  <script src="bloqueo.js?v=20261104o"></script>
+  <script src="ray.js?v=20261104o"></script>
+  <script src="app.js?v=20261104o"></script>
+  <script src="auth-bg.js?v=20261104o"></script>
+  <script src="splash.js?v=20261104o"></script>
+  <script type="module" src="cloud.js?v=20261104o"></script>
 </body>
 </html>

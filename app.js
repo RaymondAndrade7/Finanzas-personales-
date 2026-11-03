@@ -1334,6 +1334,7 @@ function renderAjustes() {
     ${accountCard}
     ${sharingCard()}
     ${themeCard}
+    ${securityCard()}
     ${ledgerTitle}
     ${c.kind === 'space' ? splitCard(c.space) : ''}
     <div class="card">
@@ -1434,6 +1435,9 @@ async function fetchRates() {
   return n;
 }
 
+let needVerify = null;      // invitación que espera la verificación del correo
+const shareChoice = {};     // lo que marcó la persona al aceptar
+
 /** Tarjeta para invitar, aceptar invitaciones y gestionar espacios compartidos. */
 function sharingCard() {
   if (!window.Cloud?.user) {
@@ -1444,7 +1448,13 @@ function sharingCard() {
   const inv = sharing.invites.map(i => `
     <div class="share-block invite">
       <div><b>${esc(i.from)}</b> te invitó a <b>«${esc(i.name)}»</b></div>
-      <label class="check"><input type="checkbox" id="share-inv-${esc(i.id)}" checked><span>Que también pueda ver mis finanzas personales (solo lectura)</span></label>
+      <label class="check"><input type="checkbox" id="share-inv-${esc(i.id)}" ${shareChoice[i.id] === false ? '' : 'checked'}><span>Que también pueda ver mis finanzas personales (solo lectura)</span></label>
+      ${needVerify === i.id ? `<div class="verify-box">
+        <b>Confirma que este correo es tuyo</b>
+        <span>Por seguridad, para unirte a un espacio necesitamos verificar <b>${esc(window.Cloud?.user?.email || '')}</b>. Te enviamos un enlace; ábrelo y luego toca «Ya lo confirmé».</span>
+        <div class="row-actions"><button class="btn small" data-action="verify-send">Enviar correo</button>
+          <button class="btn small primary" data-action="accept-invite" data-id="${esc(i.id)}">Ya lo confirmé</button></div>
+      </div>` : ''}
       <div class="row-actions">
         <button class="btn small primary" data-action="accept-invite" data-id="${esc(i.id)}">Aceptar</button>
         <button class="btn small ghost" data-action="decline-invite" data-id="${esc(i.id)}">Rechazar</button>
@@ -1893,6 +1903,13 @@ document.addEventListener('click', e => {
       save(); render();
       break;
     case 'quick': openTx(null, btn.dataset.type); break;
+    case 'lock-bio': enableBio(); break;
+    case 'lock-pin': enablePin(); break;
+    case 'lock-now': showLock(); break;
+    case 'lock-after': setLockCfg({ ...lockCfg(), after: Number(btn.dataset.v) }); render(); break;
+    case 'lock-off':
+      if (confirm('¿Quitar el bloqueo en este dispositivo?')) { setLockCfg(null); render(); toast('Bloqueo desactivado'); }
+      break;
     case 'report-pdf': printReport(); break;
     case 'aportar': openContrib(); break;
     case 'settle': {
@@ -2013,13 +2030,23 @@ document.addEventListener('click', e => {
       window.Cloud.cancelInvite(id, btn.dataset.email).catch(cloudFail);
       break;
     case 'accept-invite': {
-      const share = $('#share-inv-' + id)?.checked;
+      const share = $('#share-inv-' + id)?.checked ?? shareChoice[id] ?? true;
+      shareChoice[id] = share;
       btn.disabled = true;
       window.Cloud.acceptInvite(id, !!share)
-        .then(() => toast('¡Listo! Ya comparten este espacio'))
-        .catch(err => { btn.disabled = false; cloudFail(err); });
+        .then(() => { needVerify = null; toast('¡Listo! Ya comparten este espacio'); })
+        .catch(err => {
+          btn.disabled = false;
+          if (err?.code === 'needs-verification') { needVerify = id; render(); toast('Primero confirma tu correo'); }
+          else cloudFail(err);
+        });
       break;
     }
+    case 'verify-send':
+      window.Cloud.sendVerification()
+        .then(() => toast('Te enviamos un correo. Abre el enlace y vuelve aquí.'))
+        .catch(() => toast('No se pudo enviar. Intenta en unos minutos.'));
+      break;
     case 'decline-invite':
       if (confirm('¿Rechazar esta invitación?')) window.Cloud.declineInvite(id).catch(cloudFail);
       break;
@@ -2233,11 +2260,12 @@ function loadDemo() {
 
 /** La bienvenida espera a que termine la presentación. */
 function welcomeWhenReady() {
-  const tryIt = () => (document.getElementById('splash') ? setTimeout(tryIt, 300) : maybeWelcome());
+  const tryIt = () => (document.getElementById('splash') || !$('#lockScreen').hidden ? setTimeout(tryIt, 300) : maybeWelcome());
   setTimeout(tryIt, 300);
 }
 
 applyTheme(getTheme());
+initLock();
 initWelcome();
 initDebtDialog();
 initContribDialog();
@@ -2294,6 +2322,7 @@ window.App = {
   enter() {
     document.body.classList.remove('auth-mode');
     appStarted = true;
+    showLock();
     startView();
     welcomeWhenReady();
   }
@@ -2303,6 +2332,7 @@ if (CLOUD_ENABLED) {
   document.body.classList.add('auth-mode'); // cloud.js muestra el inicio de sesión
 } else {
   appStarted = true;
+  showLock();
   runRecurring('personal');
   startView();
   welcomeWhenReady();
