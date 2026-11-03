@@ -570,29 +570,86 @@ body.auth-mode { padding-bottom: 0; background: #030303; }
 .auth-brand b { color: #c8f031; }
 .brand span, .auth-brand span { letter-spacing: -0.02em; }
 
-/* ---------- Marca animada en la pantalla de acceso ---------- */
-.auth-brand { gap: 0; font-size: 1.9rem; font-weight: 800; letter-spacing: -0.045em; line-height: 1; }
-.auth-brand span, .auth-brand b {
+/* ---------- Marca RayFin (tamaños) ---------- */
+.auth-brand { display: block; gap: 0; font-size: 1.6rem; font-weight: 800; letter-spacing: -0.045em; line-height: 1; }
+.auth-brand span, .auth-brand b { letter-spacing: inherit; }
+.brand-word { display: inline-block; font-weight: 800; letter-spacing: -0.045em; line-height: 1; }
+.brand-wait { visibility: hidden; animation: showBrand 0s linear 9s forwards; }
+@keyframes showBrand { to { visibility: visible; } }
+
+/* ---------- Presentación (splash) ---------- */
+.splash {
+  position: fixed; inset: 0; z-index: 100;
+  display: grid; place-items: center;
+  background: #030303; color: #fff;
+  pointer-events: none;
+  font-family: var(--font);
+  /* seguridad: si algo falla, desaparece sola */
+  animation: splashFailsafe .4s ease 9s forwards;
+}
+.splash-glow {
+  position: absolute; left: 50%; top: 50%;
+  width: 560px; height: 560px; margin: -280px 0 0 -280px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(200, 240, 49, .16), rgba(25, 211, 168, .05) 55%, transparent);
+  opacity: 0; transform: scale(.7);
+  animation: glowIn 1.6s cubic-bezier(.2, .8, .2, 1) .1s forwards;
+}
+.splash-inner { position: relative; display: flex; flex-direction: column; align-items: center; }
+.splash-word {
+  font-size: clamp(3.4rem, 15vw, 6rem);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  white-space: nowrap;
+  will-change: transform;
+}
+.splash-word { letter-spacing: 0; }
+/* el espaciado negativo va en el margen para que el recorte no corte las letras */
+.splash-word .m { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: .14em; margin: 0 -0.045em -.14em 0; }
+.splash-word .m > span {
   display: inline-block;
-  opacity: 0;
-  filter: blur(10px);
-  transform: translateY(16px) scale(.92);
-  animation: letterIn .75s cubic-bezier(.2, .8, .2, 1) forwards;
-  animation-delay: calc(.35s + var(--i) * 90ms);
+  transform: translateY(110%) rotate(6deg);
+  transform-origin: left bottom;
+  animation: rise-letter .95s cubic-bezier(.16, 1, .3, 1) forwards;
+  animation-delay: calc(.25s + var(--i) * 70ms);
 }
-.auth-brand b {
-  color: #c8f031;
-  animation-name: letterIn, limeGlow;
-  animation-duration: .75s, 2.6s;
-  animation-delay: calc(.35s + var(--i) * 90ms), 1.25s;
-  animation-fill-mode: forwards, both;
-  animation-timing-function: cubic-bezier(.2, .8, .2, 1), ease-in-out;
+.splash-word .lime { color: #c8f031; animation: limePulse 1.6s ease-in-out 1.05s both; }
+.splash-line {
+  width: 64px; height: 2px; margin-top: 18px; border-radius: 2px;
+  background: linear-gradient(90deg, transparent, #c8f031, transparent);
+  transform: scaleX(0); opacity: 0;
+  animation: lineIn .8s cubic-bezier(.2, .8, .2, 1) 1s forwards;
 }
-@keyframes letterIn { to { opacity: 1; filter: blur(0); transform: none; } }
-@keyframes limeGlow {
-  0%, 100% { text-shadow: 0 0 0 rgba(200, 240, 49, 0); }
-  40% { text-shadow: 0 0 22px rgba(200, 240, 49, .8), 0 0 4px rgba(200, 240, 49, .6); }
+.splash-tag {
+  margin-top: 14px;
+  font-size: .72rem; font-weight: 600; letter-spacing: .32em; text-transform: uppercase;
+  color: #8f8f8f;
+  opacity: 0; transform: translateY(6px);
+  animation: tagIn .8s ease 1.2s forwards;
+  padding-left: .32em; /* compensa el espaciado final */
 }
+@keyframes rise-letter { to { transform: none; } }
+@keyframes glowIn { to { opacity: 1; transform: none; } }
+@keyframes lineIn { to { transform: scaleX(1); opacity: 1; } }
+@keyframes tagIn { to { opacity: 1; transform: none; } }
+@keyframes limePulse {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(200, 240, 49, 0)); }
+  45% { filter: drop-shadow(0 0 16px rgba(200, 240, 49, .75)); }
+}
+@keyframes splashFailsafe { to { opacity: 0; visibility: hidden; } }
+
+/* Salida: el fondo se desvanece y deja ver la pantalla de acceso */
+.splash.leaving { animation: none; background: transparent; transition: background .7s ease .1s; }
+.splash.leaving .splash-glow, .splash.leaving .splash-line, .splash.leaving .splash-tag { transition: opacity .35s ease; opacity: 0; animation: none; }
+.splash.leaving .splash-word .lime { animation: none; }
+.splash.gone { opacity: 0; transition: opacity .3s ease; }
+
+/* Mientras dura la presentación, el panel espera */
+/* (invisible pero en su posición final, para que el nombre aterrice exacto) */
+body.splash-on .auth-card { opacity: 0; animation: cardFailsafe 0s linear 9s forwards; }
+@keyframes cardFailsafe { to { opacity: 1; } }
+
 @media (prefers-reduced-motion: reduce) {
-  .auth-brand span, .auth-brand b { animation: none; opacity: 1; filter: none; transform: none; }
+  .splash-word .m > span, .splash-line, .splash-tag, .splash-glow { animation: none; transform: none; opacity: 1; }
 }

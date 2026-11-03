@@ -23,10 +23,20 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="styles.css?v=20261103e">
+  <link rel="stylesheet" href="styles.css?v=20261103h">
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 </head>
-<body>
+<body class="splash-on">
+  <!-- Presentación: aparece el nombre y luego viaja a su lugar -->
+  <div id="splash" class="splash" aria-hidden="true">
+    <div class="splash-glow"></div>
+    <div class="splash-inner">
+      <div class="splash-word"><span class="m"><span style="--i:0">R</span></span><span class="m"><span style="--i:1">a</span></span><span class="m"><span style="--i:2">y</span></span><span class="m lime"><span style="--i:3">F</span></span><span class="m lime"><span style="--i:4">i</span></span><span class="m lime"><span style="--i:5">n</span></span></div>
+      <div class="splash-line"></div>
+      <div class="splash-tag">Control financiero personal</div>
+    </div>
+  </div>
+
   <!-- Inicio de sesión (solo si Firebase está configurado) -->
   <div id="authScreen" class="auth" hidden>
     <!-- Fondo animado -->
@@ -35,7 +45,7 @@
     <div class="auth-grid" aria-hidden="true"></div>
 
     <div class="auth-card">
-      <div class="auth-brand" role="img" aria-label="RayFin"><span style="--i:0">R</span><span style="--i:1">a</span><span style="--i:2">y</span><b style="--i:3">F</b><b style="--i:4">i</b><b style="--i:5">n</b></div>
+      <div class="auth-brand brand-wait" role="img" aria-label="RayFin"><span>Ray</span><b>Fin</b></div>
       <h1 class="auth-headline">Tu dinero,<br><span class="grad">bajo control.</span></h1>
       <div id="authLoading" class="auth-loading">
         <div class="spinner" aria-hidden="true"></div>
@@ -83,7 +93,7 @@
 
   <header class="topbar">
     <div class="wrap topbar-inner">
-      <h1 class="brand"><img src="icons/rayfin.svg" alt="" width="26" height="26"><span>Ray<b>Fin</b></span></h1>
+      <h1 class="brand"><img src="icons/rayfin.svg" alt="" width="26" height="26"><span class="brand-word brand-wait">Ray<b>Fin</b></span></h1>
       <div class="month-picker" id="monthPicker">
         <button id="prevMonth" aria-label="Mes anterior">‹</button>
         <span id="monthLabel"></span>
@@ -205,9 +215,10 @@
   <input type="file" id="importFile" accept="application/json,.json" hidden>
   <div id="toast" role="status" aria-live="polite"></div>
 
-  <script src="firebase-config.js?v=20261103e"></script>
-  <script src="app.js?v=20261103e"></script>
-  <script src="auth-bg.js?v=20261103e"></script>
-  <script type="module" src="cloud.js?v=20261103e"></script>
+  <script src="firebase-config.js?v=20261103h"></script>
+  <script src="app.js?v=20261103h"></script>
+  <script src="auth-bg.js?v=20261103h"></script>
+  <script src="splash.js?v=20261103h"></script>
+  <script type="module" src="cloud.js?v=20261103h"></script>
 </body>
 </html>
