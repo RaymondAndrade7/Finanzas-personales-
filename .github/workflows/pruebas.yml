@@ -1,0 +1,39 @@
+# Corre las pruebas automáticas de RayFin en cada cambio.
+name: Pruebas
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # El emulador de Firebase necesita Java
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Instalar dependencias
+        run: npm install --no-audit --no-fund
+
+      - name: Instalar navegador
+        run: npx playwright install --with-deps chromium
+
+      - name: Pruebas en modo local
+        run: npm run test:local
+
+      - name: Pruebas con Firebase (emulador)
+        run: npm run test:nube

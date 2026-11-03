@@ -132,14 +132,30 @@ Requiere el modo con cuentas (Firebase).
 - **Modo local:** los datos se guardan en el navegador del dispositivo y no se envían a ningún servidor. Si borras los datos del navegador, se pierden: usa **Ajustes → Exportar respaldo** de vez en cuando.
 - **Modo con cuentas:** los datos están en tu proyecto de Firebase (Google Cloud) y solo los puede leer su dueño. Igual puedes exportar un respaldo cuando quieras.
 
+## 🧪 Pruebas automáticas
+
+En `tests/` hay pruebas que abren la app en un navegador real y revisan los flujos importantes: movimientos, plan de ahorro, monedas, pagos fijos, deudas, reportes, puntos, bienvenida, bloqueo y, con el emulador de Firebase, compartir en pareja y las reglas de seguridad.
+
+Se corren solas en GitHub (pestaña **Actions**) en cada cambio. Para correrlas en tu computadora (necesitas Node.js 20 y Java):
+
+```bash
+cd tests
+npm install
+npx playwright install chromium
+npm test
+```
+
 ## Archivos
 - `index.html`: estructura de la app
-- `styles.css`: diseño (modo claro y oscuro automático)
-- `app.js`: toda la lógica
-- `cloud.js`: inicio de sesión y sincronización con Firebase
-- `firebase-config.js`: aquí pegas la configuración de tu proyecto
+- `styles.css`: diseño (modo claro y oscuro)
+- `js/nucleo.js`, `calculos.js`, `inicio.js`, `vistas.js`, `formularios.js`, `acciones.js`, `arranque.js`: la app, en el orden en que se cargan
+- `js/fijos.js` (pagos fijos), `js/deudas.js`, `js/pareja.js` (aportes y cuentas claras), `js/reportes.js`, `js/bienvenida.js`, `js/bloqueo.js`, `js/ray.js` (el personaje)
+- `js/cloud.js`: inicio de sesión y sincronización con Firebase
+- `js/splash.js`, `js/auth-bg.js`: presentación y fondo animado del acceso
+- `firebase-config.js`: configuración de tu proyecto de Firebase
 - `firestore.rules`: reglas de seguridad de la base de datos
 - `sw.js` y `manifest.json`: instalación y uso sin conexión
-
-> Al publicar cambios en `styles.css` o en los `.js`, sube el número `?v=` en `index.html` para que todos los navegadores carguen la versión nueva.
 - `icons/`: íconos de la app
+- `tests/`: pruebas automáticas
+
+> Al publicar cambios en `styles.css` o en los `.js`, sube el número `?v=` en `index.html` (y `CACHE` en `sw.js`) para que todos los navegadores carguen la versión nueva.

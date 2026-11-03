@@ -1,0 +1,14 @@
+{
+  "name": "rayfin-pruebas",
+  "private": true,
+  "description": "Pruebas automáticas de RayFin (navegador real con Playwright)",
+  "scripts": {
+    "test:local": "node --test --test-concurrency=1 local.test.js",
+    "test:nube": "firebase emulators:exec --project demo-finanzas --only auth,firestore --config ../firebase.json \"node --test --test-concurrency=1 nube.test.js\"",
+    "test": "npm run test:local && npm run test:nube"
+  },
+  "devDependencies": {
+    "firebase-tools": "13.29.1",
+    "playwright": "1.47.2"
+  }
+}
