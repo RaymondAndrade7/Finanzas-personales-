@@ -97,4 +97,6 @@ python3 -m http.server 8000
 - `firebase-config.js`: aquí pegas la configuración de tu proyecto
 - `firestore.rules`: reglas de seguridad de la base de datos
 - `sw.js` y `manifest.json`: instalación y uso sin conexión
+
+> Al publicar cambios en `styles.css` o en los `.js`, sube el número `?v=` en `index.html` para que todos los navegadores carguen la versión nueva.
 - `icons/`: íconos de la app
