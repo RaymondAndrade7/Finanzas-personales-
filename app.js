@@ -6,6 +6,11 @@
    ========================================================= */
 
 const STORAGE_KEY = 'mis-finanzas-v1';
+
+// Modo nube: se activa si firebase-config.js tiene datos (o con ?emulador en localhost para pruebas).
+const EMULATOR = new URLSearchParams(location.search).has('emulador') &&
+  ['localhost', '127.0.0.1'].includes(location.hostname);
+const CLOUD_ENABLED = !!(window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.apiKey) || EMULATOR;
 const PALETTE = ['#0f766e', '#2563eb', '#d97706', '#dc2626', '#7c3aed', '#db2777',
   '#059669', '#ea580c', '#0891b2', '#65a30d', '#9333ea', '#64748b'];
 const GROUPS = { necesidad: 'Necesidad', gusto: 'Gusto', ahorro: 'Ahorro' };
@@ -58,13 +63,26 @@ function normalize(s) {
     categories: Array.isArray(s.categories) ? s.categories : d.categories,
     accounts: Array.isArray(s.accounts) ? s.accounts : d.accounts,
     transactions: Array.isArray(s.transactions)
-      ? s.transactions.filter(t => t && typeof t.date === 'string').map(t => ({ ...t, amount: round2(t.amount) }))
+      ? s.transactions
+        .filter(t => t && typeof t.date === 'string' && t.id)
+        .map(t => ({ ...t, amount: round2(t.amount) }))
+        .filter(t => t.amount > 0)
       : [],
     goals: Array.isArray(s.goals) ? s.goals : d.goals
   };
 }
 
+function readLocal() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? normalize(JSON.parse(raw)) : null;
+  } catch {
+    return null;
+  }
+}
+
 function load() {
+  if (CLOUD_ENABLED) return defaultState(); // los datos llegan de la nube al iniciar sesión
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return normalize(JSON.parse(raw));
@@ -76,12 +94,36 @@ function load() {
 
 let state = load();
 
+const cloudOn = () => !!(window.Cloud && window.Cloud.user);
+const cloudFail = e => {
+  console.error(e);
+  toast('⚠️ No se pudo guardar en la nube' + (e?.code === 'permission-denied' ? ': sin permiso.' : '.'));
+};
+
+/** Guarda ajustes, cuentas, categorías y metas. */
 function save() {
+  if (cloudOn()) { window.Cloud.saveMeta(state).catch(cloudFail); return; }
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) {
     toast('⚠️ No se pudo guardar. Exporta un respaldo.');
   }
+}
+/** Guarda (crea o actualiza) un movimiento. */
+function saveTx(tx) {
+  if (cloudOn()) window.Cloud.putTx(tx).catch(cloudFail);
+  else save();
+}
+/** Elimina un movimiento. */
+function removeTx(id) {
+  if (cloudOn()) window.Cloud.delTx(id).catch(cloudFail);
+  else save();
+}
+/** Reemplaza todos los datos (importar, datos de ejemplo, borrar todo). */
+function saveAll() {
+  if (cloudOn()) return window.Cloud.replaceAll(state).catch(cloudFail);
+  save();
+  return Promise.resolve();
 }
 
 /* ---------- Formatos ---------- */
@@ -510,7 +552,24 @@ function renderAjustes() {
       <button class="icon-btn" data-action="del-cat" data-id="${esc(c.id)}" aria-label="Eliminar" title="${used.has(c.id) ? 'En uso' : 'Eliminar'}">✕</button>
     </div>`).join('');
 
+  const user = window.Cloud?.user;
+  const accountCard = user
+    ? `<div class="card">
+        <div class="card-head"><h2>👤 Mi cuenta</h2><button class="btn small" data-action="logout">Cerrar sesión</button></div>
+        <div class="rows">
+          ${user.displayName ? `<div class="row"><span class="grow muted">Nombre</span><span>${esc(user.displayName)}</span></div>` : ''}
+          <div class="row"><span class="grow muted">Correo</span><span>${esc(user.email || '—')}</span></div>
+          <div class="row"><span class="grow muted">Datos</span><span class="ok">☁️ Sincronizados en la nube</span></div>
+        </div>
+      </div>`
+    : `<div class="card">
+        <h2>👤 Cuenta</h2>
+        <p class="muted" style="margin:0;font-size:.88rem">Estás en <b>modo local</b>: los datos solo existen en este dispositivo.
+        Para tener inicio de sesión y guardar las finanzas de varias personas en la nube, configura Firebase siguiendo el README.</p>
+      </div>`;
+
   $('#view-ajustes').innerHTML = `
+    ${accountCard}
     <div class="card">
       <h2>Moneda</h2>
       <div class="set-row">
@@ -545,7 +604,9 @@ function renderAjustes() {
 
     <div class="card">
       <h2>Tus datos</h2>
-      <p class="muted" style="margin:-4px 0 12px;font-size:.88rem">Tus datos se guardan <b>solo en este dispositivo</b>. Exporta un respaldo de vez en cuando para no perderlos o para pasarlos a otro dispositivo.</p>
+      <p class="muted" style="margin:-4px 0 12px;font-size:.88rem">${user
+        ? 'Tus datos están guardados en tu cuenta y puedes verlos desde cualquier dispositivo. Igual puedes descargar un respaldo cuando quieras.'
+        : 'Tus datos se guardan <b>solo en este dispositivo</b>. Exporta un respaldo de vez en cuando para no perderlos o para pasarlos a otro dispositivo.'}</p>
       <div class="btn-grid">
         <button class="btn" data-action="export-json">⬇️ Exportar respaldo</button>
         <button class="btn" data-action="import-json">⬆️ Importar respaldo</button>
@@ -626,14 +687,17 @@ txForm.addEventListener('submit', e => {
     data.categoryId = txForm.categoryId.value;
     if (!data.categoryId) { toast('Crea una categoría primero en Ajustes.'); return; }
   }
+  let record;
   if (editingTxId) {
     const i = state.transactions.findIndex(t => t.id === editingTxId);
-    if (i >= 0) state.transactions[i] = { id: editingTxId, createdAt: state.transactions[i].createdAt, ...data };
+    record = { id: editingTxId, createdAt: state.transactions[i]?.createdAt || Date.now(), ...data };
+    if (i >= 0) state.transactions[i] = record; else state.transactions.push(record);
   } else {
-    state.transactions.push({ id: uid(), createdAt: Date.now(), ...data });
+    record = { id: uid(), createdAt: Date.now(), ...data };
+    state.transactions.push(record);
   }
   lastAccountId = data.accountId;
-  save();
+  saveTx(record);
   txDialog.close();
   const ym = data.date.slice(0, 7);
   if (ym !== currentYM) currentYM = ym;
@@ -644,7 +708,7 @@ txForm.addEventListener('submit', e => {
 $('#txDelete').addEventListener('click', () => {
   if (!editingTxId || !confirm('¿Eliminar este movimiento?')) return;
   state.transactions = state.transactions.filter(t => t.id !== editingTxId);
-  save();
+  removeTx(editingTxId);
   txDialog.close();
   render();
   toast('Movimiento eliminado');
@@ -761,6 +825,9 @@ document.addEventListener('click', e => {
       state.categories = state.categories.filter(c => c.id !== id);
       save(); render();
       break;
+    case 'logout':
+      if (confirm('¿Cerrar sesión en este dispositivo?')) window.Cloud?.logout();
+      break;
     case 'export-json':
       download(`mis-finanzas-respaldo-${todayStr()}.json`, JSON.stringify(state, null, 2), 'application/json');
       break;
@@ -778,7 +845,7 @@ document.addEventListener('click', e => {
       if (!confirm('¿Borrar TODOS tus datos? Esta acción no se puede deshacer.')) break;
       if (!confirm('¿Seguro? Te recomendamos exportar un respaldo antes.')) break;
       state = defaultState();
-      save(); buildFormatter(); render();
+      saveAll(); buildFormatter(); render();
       toast('Datos borrados');
       break;
   }
@@ -830,7 +897,7 @@ $('#importFile').addEventListener('change', async e => {
     if (!data || !Array.isArray(data.transactions)) throw new Error('formato');
     if (!confirm(`Se importarán ${data.transactions.length} movimientos y reemplazarán tus datos actuales. ¿Continuar?`)) return;
     state = normalize(data);
-    save(); buildFormatter(); render();
+    saveAll(); buildFormatter(); render();
     toast('Respaldo importado ✓');
   } catch {
     toast('El archivo no es un respaldo válido.');
@@ -900,7 +967,7 @@ function loadDemo() {
   const ef = state.goals.find(g => /emergencia/i.test(g.name));
   if (ef && !ef.target) { ef.target = 6000; ef.saved = 1800; }
   state.accounts.forEach(a => { if (!a.initial) a.initial = a.name === 'Banco' ? 500 : a.name === 'Efectivo' ? 600 : 0; });
-  save();
+  saveAll();
   currentYM = ymFromDate(new Date());
   setView('inicio');
   toast('Datos de ejemplo cargados');
@@ -909,8 +976,40 @@ function loadDemo() {
 /* ---------- Inicio ---------- */
 
 buildFormatter();
-const initialView = location.hash.slice(1);
-setView(['inicio', 'movimientos', 'presupuesto', 'metas', 'ajustes'].includes(initialView) ? initialView : 'inicio');
+const VIEWS = ['inicio', 'movimientos', 'presupuesto', 'metas', 'ajustes'];
+const startView = () => setView(VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'inicio');
+let appStarted = false;
+
+// API usada por cloud.js (inicio de sesión y base de datos)
+window.App = {
+  CLOUD_ENABLED,
+  EMULATOR,
+  get state() { return state; },
+  defaultState,
+  normalize,
+  readLocal,
+  clearLocal() { try { localStorage.removeItem(STORAGE_KEY); } catch { /* sin acceso */ } },
+  toast,
+  /** Reemplaza el estado con datos llegados de la nube. */
+  setState(s) {
+    state = normalize(s);
+    buildFormatter();
+    if (appStarted) render();
+  },
+  /** Muestra la app tras iniciar sesión. */
+  enter() {
+    document.body.classList.remove('auth-mode');
+    appStarted = true;
+    startView();
+  }
+};
+
+if (CLOUD_ENABLED) {
+  document.body.classList.add('auth-mode'); // cloud.js muestra el inicio de sesión
+} else {
+  appStarted = true;
+  startView();
+}
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

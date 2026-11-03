@@ -2,7 +2,11 @@
 
 App personal para llevar tus finanzas: registra ingresos y gastos, controla tu presupuesto, sigue tus metas de ahorro y recibe consejos según tus números.
 
-Funciona en el celular y en la computadora, se puede **instalar como app** y funciona **sin internet**. No necesita servidor ni cuenta: tus datos se guardan solo en tu dispositivo.
+Funciona en el celular y en la computadora, se puede **instalar como app** y funciona **sin internet**.
+
+Tiene dos modos:
+- **Modo local** (por defecto): sin cuentas; los datos quedan solo en el dispositivo.
+- **Modo con cuentas** (opcional, con Firebase): **inicio de sesión** y **base de datos en la nube**. Cada persona tiene su cuenta, ve solo sus finanzas y las sincroniza entre celular y computadora. El plan gratuito alcanza de sobra para 5 personas o más.
 
 ## Qué incluye
 
@@ -37,14 +41,60 @@ python3 -m http.server 8000
 4. Crea tu **Fondo de emergencia** en Metas y abónale cada vez que cobres.
 5. Cada domingo, revisa **Inicio** durante 10 minutos.
 
+## 🔐 Inicio de sesión y base de datos (Firebase)
+
+Configúralo una sola vez (unos 10 minutos). Es gratis con el plan **Spark**.
+
+### 1. Crear el proyecto
+1. Entra a <https://console.firebase.google.com> con tu cuenta de Google y toca **Agregar proyecto**. Ponle un nombre, por ejemplo `mis-finanzas`. Google Analytics no hace falta.
+2. En la página del proyecto toca el ícono **`</>`** (Web) para registrar una app web. Ponle un nombre y **no** marques Hosting.
+3. Firebase te muestra un bloque `firebaseConfig`. Copia esos valores en **`firebase-config.js`** de este repositorio (`apiKey`, `authDomain`, `projectId`, etc.).
+   > Estos valores no son secretos: es normal que estén en el código. La seguridad la dan las reglas del paso 3.
+
+### 2. Activar el inicio de sesión
+1. Menú **Compilación → Authentication → Comenzar**.
+2. En **Sign-in method** activa **Correo electrónico/contraseña** y, si quieres, **Google**.
+3. En **Settings → Authorized domains** agrega `raymondandrade7.github.io` (necesario para el botón de Google).
+
+### 3. Crear la base de datos y sus reglas
+1. Menú **Compilación → Firestore Database → Crear base de datos**. Elige una ubicación cercana, por ejemplo `us-east1`, y empieza en **modo de producción**.
+2. Ve a la pestaña **Reglas**, borra lo que haya, pega el contenido de **`firestore.rules`** y toca **Publicar**.
+
+Listo. Al abrir la app aparecerá la pantalla de inicio de sesión.
+
+### ¿Quién puede entrar?
+Por defecto, cualquiera que tenga el enlace puede crear su cuenta, pero **cada persona solo ve sus propios datos**. Si quieres que solo entren tus 5 personas:
+- **Opción A (recomendada):** en `firestore.rules` escribe los 5 correos en `allowed()`, cambia `allowAnyone()` por `allowed()` dentro de `isOwner` y vuelve a publicar las reglas.
+- **Opción B:** pon `allowSignup: false` en `firebase-config.js` y crea tú las cuentas en **Authentication → Users → Agregar usuario**. Esto solo oculta el botón; la protección real es la opción A.
+
+### Cómo se guardan los datos
+```
+users/{id-de-la-persona}                       ← ajustes, cuentas, categorías y metas
+users/{id-de-la-persona}/transactions/{id}     ← un documento por movimiento
+```
+- Los cambios se sincronizan **en vivo** entre los dispositivos de la misma persona.
+- Si no hay internet, la app sigue funcionando y sube los cambios cuando vuelve la conexión.
+- La primera vez que alguien entra, si ese dispositivo tenía datos en modo local, la app ofrece **subirlos a su cuenta**.
+- Al **cerrar sesión** se borra la copia del dispositivo, así que se puede usar un dispositivo compartido sin problema.
+
+### Probar sin crear proyecto (para desarrolladores)
+Con el [emulador de Firebase](https://firebase.google.com/docs/emulator-suite):
+```bash
+npx firebase-tools emulators:start --project demo-finanzas --only auth,firestore
+python3 -m http.server 8000
+# abre http://localhost:8000/?emulador
+```
+
 ## ⚠️ Sobre tus datos
-- Se guardan en el almacenamiento del navegador del dispositivo donde uses la app. **No se envían a ningún servidor.**
-- Si borras los datos del navegador, los pierdes. Usa **Ajustes → Exportar respaldo** de vez en cuando.
-- Para pasar tus datos a otro dispositivo: exporta el respaldo en uno e impórtalo en el otro.
+- **Modo local:** los datos se guardan en el navegador del dispositivo y no se envían a ningún servidor. Si borras los datos del navegador, se pierden: usa **Ajustes → Exportar respaldo** de vez en cuando.
+- **Modo con cuentas:** los datos están en tu proyecto de Firebase (Google Cloud) y solo los puede leer su dueño. Igual puedes exportar un respaldo cuando quieras.
 
 ## Archivos
 - `index.html`: estructura de la app
 - `styles.css`: diseño (modo claro y oscuro automático)
 - `app.js`: toda la lógica
+- `cloud.js`: inicio de sesión y sincronización con Firebase
+- `firebase-config.js`: aquí pegas la configuración de tu proyecto
+- `firestore.rules`: reglas de seguridad de la base de datos
 - `sw.js` y `manifest.json`: instalación y uso sin conexión
 - `icons/`: íconos de la app

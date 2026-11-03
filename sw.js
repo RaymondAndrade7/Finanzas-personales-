@@ -1,6 +1,6 @@
 // Service worker: permite usar la app sin conexión.
-const CACHE = 'mis-finanzas-v1';
-const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.json',
+const CACHE = 'mis-finanzas-v2';
+const ASSETS = ['./', './index.html', './styles.css', './app.js', './cloud.js', './firebase-config.js', './manifest.json',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -15,7 +15,10 @@ self.addEventListener('activate', e => {
 
 // Red primero (para recibir actualizaciones), caché si no hay conexión.
 self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
+  const url = new URL(e.request.url);
+  // Archivos propios + librería de Firebase (para abrir la app sin conexión).
+  const cacheable = url.origin === location.origin || url.href.startsWith('https://www.gstatic.com/firebasejs/');
+  if (e.request.method !== 'GET' || !cacheable) return;
   e.respondWith(
     fetch(e.request)
       .then(res => {

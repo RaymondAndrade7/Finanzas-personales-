@@ -1,0 +1,41 @@
+rules_version = '2';
+
+// Reglas de seguridad de la base de datos.
+// Cada persona solo puede leer y escribir SUS propios datos.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- OPCIONAL: lista de correos con permiso -------------------------
+    // Si quieres que SOLO ciertas personas puedan usar la app, escribe sus
+    // correos aquí y cambia `allowAnyone()` por `allowed()` más abajo.
+    function allowed() {
+      return request.auth.token.email in [
+        'persona1@gmail.com',
+        'persona2@gmail.com',
+        'persona3@gmail.com',
+        'persona4@gmail.com',
+        'persona5@gmail.com'
+      ];
+    }
+    function allowAnyone() {
+      return true;
+    }
+    // ----------------------------------------------------------------------
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid && allowAnyone();
+    }
+
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+
+      match /transactions/{txId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && request.resource.data.amount is number
+          && request.resource.data.amount > 0
+          && request.resource.data.date is string;
+      }
+    }
+  }
+}

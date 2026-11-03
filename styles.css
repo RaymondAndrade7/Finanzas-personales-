@@ -184,7 +184,8 @@ small, .muted { color: var(--muted); }
 .subhead { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 14px 0 4px; }
 
 /* ---------- Controles ---------- */
-input[type="text"], input[type="number"], input[type="date"], input[type="search"], select {
+input[type="text"], input[type="number"], input[type="date"], input[type="search"],
+input[type="email"], input[type="password"], select {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -288,3 +289,29 @@ dialog h2 { margin: 0; font-size: 1.1rem; }
   width: max-content; max-width: calc(100vw - 32px); text-align: center;
 }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---------- Inicio de sesión ---------- */
+body.auth-mode .topbar, body.auth-mode main, body.auth-mode .tabs, body.auth-mode .fab { display: none; }
+body.auth-mode { padding-bottom: 0; }
+.auth { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; }
+.auth[hidden] { display: none; }
+.auth-card {
+  width: 100%; max-width: 380px; text-align: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+  box-shadow: var(--shadow); padding: 28px 22px;
+}
+.auth-card img { border-radius: 16px; }
+.auth-card h1 { font-size: 1.4rem; margin: 10px 0 4px; }
+.auth-card form { display: flex; flex-direction: column; gap: 12px; text-align: left; margin-top: 14px; }
+.auth-card form .btn { margin-top: 4px; }
+.auth-loading { padding: 18px 0 4px; color: var(--muted); }
+.auth-loading[hidden], #authPanel[hidden], #authGoogleWrap[hidden], .link-btn[hidden] { display: none; }
+.spinner { width: 32px; height: 32px; margin: 0 auto 10px; border-radius: 50%; border: 3px solid var(--track); border-top-color: var(--primary); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.auth-msg { min-height: 1.2em; font-size: .88rem; margin: 10px 0 0; }
+.auth-msg:empty { margin: 0; min-height: 0; }
+.link-btn { background: none; border: 0; color: var(--primary); font-weight: 600; cursor: pointer; padding: 8px; margin-top: 4px; font-size: .9rem; }
+.divider { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .85rem; margin: 12px 0; }
+.divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.btn.google { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
+.btn:disabled { opacity: .6; cursor: default; }
