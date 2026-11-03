@@ -1,5 +1,5 @@
 // Service worker: permite usar la app sin conexión.
-const CACHE = 'mis-finanzas-v4';
+const CACHE = 'mis-finanzas-v5';
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './cloud.js', './auth-bg.js', './firebase-config.js', './manifest.json',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png'];
 
@@ -19,8 +19,12 @@ self.addEventListener('fetch', e => {
   // Archivos propios + librería de Firebase (para abrir la app sin conexión).
   const cacheable = url.origin === location.origin || url.href.startsWith('https://www.gstatic.com/firebasejs/');
   if (e.request.method !== 'GET' || !cacheable) return;
+  // Archivos propios: siempre preguntar al servidor si hay versión nueva (evita la caché de 10 min).
+  const req = url.origin === location.origin
+    ? fetch(url.href, { cache: 'no-cache', credentials: 'same-origin' })
+    : fetch(e.request);
   e.respondWith(
-    fetch(e.request)
+    req
       .then(res => {
         if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
         return res;
