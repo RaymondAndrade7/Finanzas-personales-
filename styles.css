@@ -935,3 +935,7 @@ body.read-only .tx { cursor: default; }
 .free-box small { color: var(--muted); font-size: .78rem; }
 .free-box b { font-size: 1.8rem; font-weight: 800; letter-spacing: -0.03em; }
 .free-box span { font-size: .85rem; color: var(--muted); }
+
+/* ---------- Cuentas claras ---------- */
+.settle-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; margin-bottom: 8px; border-radius: 12px; background: var(--surface-2); font-size: .9rem; flex-wrap: wrap; }
+.settle-line.ok { color: var(--ing); font-weight: 700; justify-content: center; }

@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="styles.css?v=20261104g">
+  <link rel="stylesheet" href="styles.css?v=20261104i">
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 </head>
 <body class="splash-on">
@@ -163,6 +163,9 @@
       <label class="field" id="toAccountField" hidden>Hacia la cuenta
         <select name="toAccountId"></select>
       </label>
+      <label class="field" id="paidByField" hidden>¿Quién pagó?
+        <select name="paidBy"></select>
+      </label>
       <label class="field" id="toAmountField" hidden><span>Monto que llega <b id="toAmountCur" class="cur-tag"></b></span>
         <input type="number" name="toAmount" inputmode="decimal" step="0.01" min="0.01" placeholder="0.00">
       </label>
@@ -231,6 +234,34 @@
     </form>
   </dialog>
 
+  <!-- Aportar al espacio compartido -->
+  <dialog id="contribDialog">
+    <form id="contribForm" method="dialog">
+      <h2 id="contribTitle">Aportar</h2>
+      <p class="muted" style="margin:-4px 0 0;font-size:.85rem">Sale de tu cuenta personal y llega a la cuenta del espacio. Se registra en los dos lados.</p>
+      <label class="field">Monto
+        <input type="number" name="amount" inputmode="decimal" step="0.01" min="0.01" required placeholder="0.00">
+      </label>
+      <label class="field">Desde mi cuenta
+        <select name="from"></select>
+      </label>
+      <label class="field">Hacia la cuenta del espacio
+        <select name="to"></select>
+      </label>
+      <label class="field">Fecha
+        <input type="date" name="date" required>
+      </label>
+      <label class="field">Nota (opcional)
+        <input type="text" name="note" maxlength="80" placeholder="Ej: aporte de noviembre">
+      </label>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" data-close>Cancelar</button>
+        <button type="submit" class="btn primary">Aportar</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Deuda o préstamo -->
   <dialog id="debtDialog">
     <form id="debtForm" method="dialog">
@@ -295,13 +326,14 @@
   <input type="file" id="importFile" accept="application/json,.json" hidden>
   <div id="toast" role="status" aria-live="polite"></div>
 
-  <script src="firebase-config.js?v=20261104g"></script>
-  <script src="fijos.js?v=20261104g"></script>
-  <script src="deudas.js?v=20261104g"></script>
-  <script src="ray.js?v=20261104g"></script>
-  <script src="app.js?v=20261104g"></script>
-  <script src="auth-bg.js?v=20261104g"></script>
-  <script src="splash.js?v=20261104g"></script>
-  <script type="module" src="cloud.js?v=20261104g"></script>
+  <script src="firebase-config.js?v=20261104i"></script>
+  <script src="fijos.js?v=20261104i"></script>
+  <script src="deudas.js?v=20261104i"></script>
+  <script src="pareja.js?v=20261104i"></script>
+  <script src="ray.js?v=20261104i"></script>
+  <script src="app.js?v=20261104i"></script>
+  <script src="auth-bg.js?v=20261104i"></script>
+  <script src="splash.js?v=20261104i"></script>
+  <script type="module" src="cloud.js?v=20261104i"></script>
 </body>
 </html>

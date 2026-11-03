@@ -1046,7 +1046,9 @@ function renderInicio() {
       ${quick('gasto', 'Gasto', ICONS.out)}
       ${quick('ingreso', 'Ingreso', ICONS.in)}
       ${quick('transferencia', 'Transferir', ICONS.swap)}
-      <button class="q" data-action="goto" data-view="metas"><span class="q-ico">${ICONS.flag}</span>Metas</button>
+      ${c.kind === 'space'
+        ? `<button class="q" data-action="aportar"><span class="q-ico">${ICONS.users}</span>Aportar</button>`
+        : `<button class="q" data-action="goto" data-view="metas"><span class="q-ico">${ICONS.flag}</span>Metas</button>`}
     </div>
     ${rayCard(c, txs, ing, gas, byCat)}
     <div class="stats">
@@ -1070,7 +1072,7 @@ function renderInicio() {
         </div>`;
       }).join('') : empty('No tienes cuentas. Agrégalas en Ajustes.')}
     </div>
-    ${c.kind === 'space' ? contributionsCard(c.space, txs) : ''}
+    ${c.kind === 'space' ? settleCard(c.space) : ''}
     <div class="card">
       <h2>Gastos por categoría</h2>
       ${byCat.length ? `<div class="donut-wrap">${donut(byCat, gas)}
@@ -1121,7 +1123,12 @@ function renderMovimientos() {
 
   const row = t => {
     let title, sub, cls, sign, color;
-    if (t.type === 'transferencia') {
+    if (t.type === 'liquidacion') {
+      const sp = currentSpace();
+      title = 'Cuentas saldadas';
+      sub = `${memberName(sp, t.from)} le pagó a ${memberName(sp, t.to)}`;
+      cls = 'tr'; sign = ''; color = '#2fd6b0';
+    } else if (t.type === 'transferencia') {
       title = 'Transferencia';
       sub = `${accById(t.accountId)?.name || '?'} → ${accById(t.toAccountId)?.name || '?'}`;
       cls = 'tr'; sign = ''; color = '#94a3b8';
@@ -1134,7 +1141,8 @@ function renderMovimientos() {
       color = c?.color;
     }
     if (t.note) sub = `${t.note} · ${sub}`;
-    if (isSpace() && t.createdBy) sub += ` · ${t.createdBy.uid === window.Cloud?.uid ? 'tú' : firstName(t.createdBy.name)}`;
+    if (isSpace() && t.type === 'gasto' && t.paidBy) sub += ` · pagó ${memberName(currentSpace(), t.paidBy).toLowerCase() === 'tú' ? 'tú' : memberName(currentSpace(), t.paidBy)}`;
+    else if (isSpace() && t.createdBy && t.type !== 'liquidacion') sub += ` · ${t.createdBy.uid === window.Cloud?.uid ? 'tú' : firstName(t.createdBy.name)}`;
     return `<button class="tx" data-id="${esc(t.id)}">
       <i class="dot" style="--dot-c:${safeColor(color)}"></i>
       <div class="tx-main"><div class="tx-title">${esc(title)}</div><div class="tx-sub">${esc(sub)}</div></div>
@@ -1327,6 +1335,7 @@ function renderAjustes() {
     ${sharingCard()}
     ${themeCard}
     ${ledgerTitle}
+    ${c.kind === 'space' ? splitCard(c.space) : ''}
     <div class="card">
       <h2>Moneda principal</h2>
       <p class="muted" style="margin:-6px 0 4px;font-size:.85rem">En esta moneda se calculan el patrimonio, el plan, los presupuestos y los reportes.</p>
@@ -1559,6 +1568,16 @@ function syncTxForm(keep = {}) {
   const to = keep.toAccountId ?? state.accounts.find(a => a.id !== txForm.accountId.value)?.id;
   fillSelect(txForm.toAccountId, state.accounts.map(accLabel), to);
   if (keep.toAmount) txForm.toAmount.value = keep.toAmount;
+  // En un espacio compartido: quién pagó el gasto
+  const sp = currentSpace();
+  const showPaid = !!sp && type === 'gasto';
+  $('#paidByField').hidden = !showPaid;
+  if (showPaid) {
+    const sel = keep.paidBy || window.Cloud?.uid;
+    const ids = [...sp.members.filter(m => m.me), ...sp.members.filter(m => !m.me)].map(m => m.uid);
+    txForm.paidBy.innerHTML = [...ids, POT].map(u =>
+      `<option value="${esc(u)}" ${u === sel ? 'selected' : ''}>${esc(memberName(sp, u))}</option>`).join('');
+  }
   updateAmountHints();
 }
 
@@ -1663,6 +1682,7 @@ txForm.addEventListener('submit', e => {
     data.categoryId = txForm.categoryId.value;
     if (!data.categoryId) { toast('Crea una categoría primero en Ajustes.'); return; }
   }
+  if (type === 'gasto' && !$('#paidByField').hidden) data.paidBy = txForm.paidBy.value;
   // Pago fijo: plantilla (y el primer movimiento si es nuevo)
   const freq = txForm.repeat.value;
   if (editingRecId || freq) {
@@ -1873,6 +1893,24 @@ document.addEventListener('click', e => {
       save(); render();
       break;
     case 'quick': openTx(null, btn.dataset.type); break;
+    case 'aportar': openContrib(); break;
+    case 'settle': {
+      const sp = currentSpace();
+      const amt = Number(btn.dataset.amount);
+      if (confirm(`¿Confirmas que ${memberName(sp, btn.dataset.from)} le pagó ${fmt(amt)} a ${memberName(sp, btn.dataset.to)}?`)) {
+        recordSettlement(btn.dataset.from, btn.dataset.to, amt);
+      }
+      break;
+    }
+    case 'split-mode':
+      if (guardRO()) break;
+      state.settings.split = { ...(state.settings.split || {}), mode: btn.dataset.mode };
+      if (btn.dataset.mode === 'manual' && !state.settings.split.manual) {
+        const sh = splitShares(state, currentSpace());
+        state.settings.split.manual = Object.fromEntries(Object.entries(sh).map(([u, v]) => [u, Math.round(v * 100)]));
+      }
+      save(); render();
+      break;
     case 'metas-tab': metasTab = btn.dataset.tab; setView('metas'); break;
     case 'debt-new': if (!guardRO()) openDebt(); break;
     case 'debt-edit': if (!guardRO()) openDebt(state.debts.find(d => d.id === id)); break;
@@ -2028,6 +2066,14 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   const t = e.target;
   const d = t.dataset;
+  if (d.split) {
+    if (guardRO()) return;
+    const sp = state.settings.split || { mode: 'manual' };
+    sp.manual = { ...(sp.manual || {}), [d.split]: Math.max(0, Math.round(Number(t.value) || 0)) };
+    state.settings.split = sp;
+    save(); render();
+    return;
+  }
   if ('debtExtra' in d) {
     if (guardRO()) return;
     state.settings.debtExtra = Math.max(0, round2(t.value));
@@ -2186,6 +2232,7 @@ function loadDemo() {
 
 applyTheme(getTheme());
 initDebtDialog();
+initContribDialog();
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => applyTheme(getTheme()));
 buildFormatter();
 const VIEWS = ['inicio', 'movimientos', 'presupuesto', 'metas', 'ajustes'];
