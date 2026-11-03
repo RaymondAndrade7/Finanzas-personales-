@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Mis Finanzas</title>
+  <meta name="description" content="App personal para registrar ingresos, gastos, presupuestos y metas de ahorro.">
+  <meta name="theme-color" content="#0f766e">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Mis Finanzas">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <h1>Mis Finanzas</h1>
+      <div class="month-picker" id="monthPicker">
+        <button id="prevMonth" aria-label="Mes anterior">‹</button>
+        <span id="monthLabel"></span>
+        <button id="nextMonth" aria-label="Mes siguiente">›</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section id="view-inicio" class="view active"></section>
+
+    <section id="view-movimientos" class="view">
+      <div class="toolbar">
+        <input type="search" id="txSearch" placeholder="Buscar por nota o categoría…" autocomplete="off">
+        <select id="txType" aria-label="Filtrar por tipo">
+          <option value="todos">Todos</option>
+          <option value="gasto">Gastos</option>
+          <option value="ingreso">Ingresos</option>
+          <option value="transferencia">Transferencias</option>
+        </select>
+      </div>
+      <div id="txList"></div>
+    </section>
+
+    <section id="view-presupuesto" class="view"></section>
+    <section id="view-metas" class="view"></section>
+    <section id="view-ajustes" class="view"></section>
+  </main>
+
+  <button id="fab" class="fab" aria-label="Agregar movimiento">+</button>
+
+  <nav class="tabs" aria-label="Secciones">
+    <div class="wrap tabs-inner">
+      <button data-view="inicio" class="active"><span aria-hidden="true">🏠</span>Inicio</button>
+      <button data-view="movimientos"><span aria-hidden="true">📋</span>Movimientos</button>
+      <button data-view="presupuesto"><span aria-hidden="true">🎯</span>Presupuesto</button>
+      <button data-view="metas"><span aria-hidden="true">🐷</span>Metas</button>
+      <button data-view="ajustes"><span aria-hidden="true">⚙️</span>Ajustes</button>
+    </div>
+  </nav>
+
+  <!-- Formulario de movimiento -->
+  <dialog id="txDialog">
+    <form id="txForm" method="dialog">
+      <h2 id="txTitle">Nuevo movimiento</h2>
+      <div class="segmented" role="radiogroup" aria-label="Tipo">
+        <label><input type="radio" name="type" value="gasto" checked><span>Gasto</span></label>
+        <label><input type="radio" name="type" value="ingreso"><span>Ingreso</span></label>
+        <label><input type="radio" name="type" value="transferencia"><span>Transferencia</span></label>
+      </div>
+      <label class="field">Monto
+        <input type="number" name="amount" inputmode="decimal" step="0.01" min="0.01" required placeholder="0.00">
+      </label>
+      <label class="field">Fecha
+        <input type="date" name="date" required>
+      </label>
+      <label class="field" id="catField">Categoría
+        <select name="categoryId"></select>
+      </label>
+      <label class="field"><span id="accountLabel">Cuenta</span>
+        <select name="accountId"></select>
+      </label>
+      <label class="field" id="toAccountField" hidden>Hacia la cuenta
+        <select name="toAccountId"></select>
+      </label>
+      <label class="field">Nota (opcional)
+        <input type="text" name="note" maxlength="120" placeholder="Ej: supermercado, almuerzo…">
+      </label>
+      <div class="dialog-actions">
+        <button type="button" class="btn danger ghost" id="txDelete" hidden>Eliminar</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" data-close>Cancelar</button>
+        <button type="submit" class="btn primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Formulario de meta -->
+  <dialog id="goalDialog">
+    <form id="goalForm" method="dialog">
+      <h2 id="goalTitle">Nueva meta</h2>
+      <label class="field">Nombre
+        <input type="text" name="name" required maxlength="60" placeholder="Ej: Fondo de emergencia">
+      </label>
+      <label class="field">Monto objetivo
+        <input type="number" name="target" inputmode="decimal" step="0.01" min="0" required>
+      </label>
+      <label class="field">Ahorrado hasta ahora
+        <input type="number" name="saved" inputmode="decimal" step="0.01" min="0" value="0">
+      </label>
+      <label class="field">Fecha límite (opcional)
+        <input type="date" name="deadline">
+      </label>
+      <div class="dialog-actions">
+        <button type="button" class="btn danger ghost" id="goalDelete" hidden>Eliminar</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" data-close>Cancelar</button>
+        <button type="submit" class="btn primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Abonar / retirar de una meta -->
+  <dialog id="depositDialog">
+    <form id="depositForm" method="dialog">
+      <h2 id="depositTitle">Abonar</h2>
+      <label class="field">Monto
+        <input type="number" name="amount" inputmode="decimal" step="0.01" min="0.01" required>
+      </label>
+      <div class="dialog-actions">
+        <button type="button" class="btn ghost" data-close>Cancelar</button>
+        <span class="spacer"></span>
+        <button type="submit" class="btn ghost" value="retirar">Retirar</button>
+        <button type="submit" class="btn primary" value="abonar">Abonar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <input type="file" id="importFile" accept="application/json,.json" hidden>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
