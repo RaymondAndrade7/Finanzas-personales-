@@ -813,3 +813,29 @@ body.read-only .tx { cursor: default; }
 @media (prefers-reduced-motion: reduce) {
   .ray *, .ray { animation: none !important; }
 }
+
+/* Ray sin caja: flota sobre el fondo con su propio resplandor */
+.card.ray-card {
+  background: none; background-image: none; border: 0; box-shadow: none;
+  padding: 0 0 4px; margin: 4px 0 14px; overflow: visible; gap: 6px;
+}
+.ray-stage { position: relative; width: 132px; height: 132px; border-radius: 50%; }
+.ray-stage:hover { background: none; }
+.ray-stage::before, .ray-pair::before {
+  content: ""; position: absolute; inset: -14px; z-index: -1; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(closest-side, var(--ray-glow), transparent 75%);
+  animation: rayGlow 3.2s ease-in-out infinite;
+}
+.ray-stage:focus-visible { outline-offset: -6px; }
+.ray-pair { position: relative; }
+.ray-mini { width: 84px; } .ray-mini .ray { width: 84px; height: 84px; }
+.ray-bubble { background: var(--surface); border: 1px solid var(--border); box-shadow: 0 6px 24px rgba(0, 0, 0, .18); }
+.ray-bubble::before { background: var(--surface); border-left: 1px solid var(--border); border-bottom: 1px solid var(--border); top: 30px; }
+@keyframes rayGlow { 0%, 100% { opacity: .85; transform: scale(1); } 50% { opacity: 1; transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) { .ray-stage::before, .ray-pair::before { animation: none; } }
+
+/* Resplandor y destellos de Ray según el tema */
+:root { --ray-glow: rgba(178, 220, 22, .32); --ray-spark: #b2dc16; }
+:root[data-theme="dark"] { --ray-glow: rgba(200, 240, 49, .2); --ray-spark: #ffffff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ray-glow: rgba(200, 240, 49, .2); --ray-spark: #ffffff; } }
+.ray .ray-spark { fill: var(--ray-spark); }
