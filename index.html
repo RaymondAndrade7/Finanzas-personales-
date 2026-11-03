@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="styles.css?v=20261104k">
+  <link rel="stylesheet" href="styles.css?v=20261104l">
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 </head>
 <body class="splash-on">
@@ -234,6 +234,11 @@
     </form>
   </dialog>
 
+  <!-- Bienvenida guiada -->
+  <dialog id="welcomeDialog" class="welcome-dialog">
+    <div class="welcome" id="welcomeBody"></div>
+  </dialog>
+
   <!-- Aportar al espacio compartido -->
   <dialog id="contribDialog">
     <form id="contribForm" method="dialog">
@@ -326,15 +331,16 @@
   <input type="file" id="importFile" accept="application/json,.json" hidden>
   <div id="toast" role="status" aria-live="polite"></div>
 
-  <script src="firebase-config.js?v=20261104k"></script>
-  <script src="fijos.js?v=20261104k"></script>
-  <script src="deudas.js?v=20261104k"></script>
-  <script src="pareja.js?v=20261104k"></script>
-  <script src="reportes.js?v=20261104k"></script>
-  <script src="ray.js?v=20261104k"></script>
-  <script src="app.js?v=20261104k"></script>
-  <script src="auth-bg.js?v=20261104k"></script>
-  <script src="splash.js?v=20261104k"></script>
-  <script type="module" src="cloud.js?v=20261104k"></script>
+  <script src="firebase-config.js?v=20261104l"></script>
+  <script src="fijos.js?v=20261104l"></script>
+  <script src="deudas.js?v=20261104l"></script>
+  <script src="pareja.js?v=20261104l"></script>
+  <script src="reportes.js?v=20261104l"></script>
+  <script src="bienvenida.js?v=20261104l"></script>
+  <script src="ray.js?v=20261104l"></script>
+  <script src="app.js?v=20261104l"></script>
+  <script src="auth-bg.js?v=20261104l"></script>
+  <script src="splash.js?v=20261104l"></script>
+  <script type="module" src="cloud.js?v=20261104l"></script>
 </body>
 </html>

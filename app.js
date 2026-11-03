@@ -2231,7 +2231,14 @@ function loadDemo() {
 
 /* ---------- Inicio ---------- */
 
+/** La bienvenida espera a que termine la presentación. */
+function welcomeWhenReady() {
+  const tryIt = () => (document.getElementById('splash') ? setTimeout(tryIt, 300) : maybeWelcome());
+  setTimeout(tryIt, 300);
+}
+
 applyTheme(getTheme());
+initWelcome();
 initDebtDialog();
 initContribDialog();
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => applyTheme(getTheme()));
@@ -2288,6 +2295,7 @@ window.App = {
     document.body.classList.remove('auth-mode');
     appStarted = true;
     startView();
+    welcomeWhenReady();
   }
 };
 
@@ -2297,6 +2305,7 @@ if (CLOUD_ENABLED) {
   appStarted = true;
   runRecurring('personal');
   startView();
+  welcomeWhenReady();
 }
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {

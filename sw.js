@@ -1,6 +1,6 @@
 // Service worker: permite usar la app sin conexión.
-const CACHE = 'rayfin-v12';
-const ASSETS = ['./', './index.html', './styles.css', './app.js', './cloud.js', './auth-bg.js', './splash.js', './ray.js', './fijos.js', './deudas.js', './pareja.js', './reportes.js', './firebase-config.js', './manifest.json',
+const CACHE = 'rayfin-v13';
+const ASSETS = ['./', './index.html', './styles.css', './app.js', './cloud.js', './auth-bg.js', './splash.js', './ray.js', './fijos.js', './deudas.js', './pareja.js', './reportes.js', './bienvenida.js', './firebase-config.js', './manifest.json',
   './icons/rayfin-rf.svg', './icons/rayfin-rf-180.png', './icons/rayfin-rf-192.png', './icons/rayfin-rf-512.png', './icons/rayfin-rf-maskable-512.png'];
 
 self.addEventListener('install', e => {

@@ -972,3 +972,26 @@ body.read-only .tx { cursor: default; }
   body.print-report .trend .bar-ing { fill: #11833f; } body.print-report .trend .bar-gas { fill: #c62839; }
   @page { margin: 14mm; }
 }
+
+/* ---------- Bienvenida ---------- */
+.welcome-dialog { width: min(460px, calc(100vw - 24px)); }
+@media (max-width: 600px) { .welcome-dialog { width: 100%; max-width: 100%; } }
+.welcome { padding: 22px 20px 18px; display: flex; flex-direction: column; gap: 10px; }
+.welcome h2 { margin: 4px 0 0; font-size: 1.45rem; letter-spacing: -0.03em; }
+.welcome p { margin: 0; color: var(--muted); line-height: 1.45; }
+.welcome p b { color: var(--text); }
+.wz-dots { display: flex; gap: 6px; justify-content: center; margin-bottom: 4px; }
+.wz-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--surface-3); }
+.wz-dots i.done { background: var(--muted); }
+.wz-dots i.on { background: var(--accent); width: 20px; border-radius: 4px; }
+.wz-ray { display: grid; place-items: center; height: 150px; position: relative; }
+.wz-ray::before { content: ""; position: absolute; width: 170px; height: 170px; border-radius: 50%; background: radial-gradient(closest-side, var(--ray-glow), transparent 75%); }
+.wz-ray .ray { width: 140px; height: 140px; position: relative; }
+.wz-nav { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+.wz-nav.col { flex-direction: column; align-items: stretch; }
+.wz-acc { display: flex; gap: 6px; align-items: center; }
+.wz-acc input[type="text"] { flex: 1; min-width: 0; }
+.wz-acc select { width: 82px; flex: none; }
+.wz-acc input[type="number"] { width: 100px; flex: none; }
+.wz-big { font-size: 1.5rem !important; font-weight: 700; min-height: 54px; }
+.wz-result { font-size: .92rem; }
