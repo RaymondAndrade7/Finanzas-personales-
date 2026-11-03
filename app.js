@@ -450,6 +450,163 @@ function avgMonthlyExpenses() {
   return recent.length ? sum(recent) / recent.length : 0;
 }
 
+/* ---------- Puntos y logros ---------- */
+
+const PTS = { plan: 300, budget: 150, perDay: 5, maxDays: 20, team: 200 };
+const LEVEL_SIZE = 500;
+
+/** Resumen de un mes de un libro (para puntos). */
+function monthStats(L, ym) {
+  const cat = id => L.categories.find(c => c.id === id);
+  let ing = 0, nec = 0, gus = 0;
+  const days = new Set(), spent = new Map();
+  let n = 0;
+  for (const t of L.transactions) {
+    if (!t.date.startsWith(ym)) continue;
+    n++; days.add(t.date);
+    if (t.type === 'ingreso') ing += t.amount;
+    if (t.type === 'gasto') {
+      spent.set(t.categoryId, (spent.get(t.categoryId) || 0) + t.amount);
+      const g = cat(t.categoryId)?.group || 'gusto';
+      if (g === 'necesidad') nec += t.amount; else if (g === 'gusto') gus += t.amount;
+    }
+  }
+  const budgets = L.categories.filter(c => c.type === 'gasto' && Number(c.budget) > 0);
+  const budgetOk = n > 0 && budgets.length > 0 && budgets.every(c => (spent.get(c.id) || 0) <= Number(c.budget));
+  const balanced = ing > 0 && nec / ing <= .5 && gus / ing <= .3 && (ing - nec - gus) / ing >= .2;
+  return { n, days: days.size, ing, budgetOk, balanced };
+}
+
+function avgExpensesOf(L) {
+  const cat = id => L.categories.find(c => c.id === id);
+  const vals = lastMonths(6, ymFromDate(new Date())).map(ym => sum(L.transactions
+    .filter(t => t.date.startsWith(ym) && t.type === 'gasto' && cat(t.categoryId)?.group !== 'ahorro').map(t => t.amount))).filter(v => v > 0);
+  const recent = vals.slice(-3);
+  return recent.length ? sum(recent) / recent.length : 0;
+}
+
+/**
+ * Puntos de una persona, calculados a partir de sus datos (así no se pueden "perder" ni duplicar).
+ * Los meses ya cerrados cuentan para plan, presupuesto y equipo; el registro diario cuenta también el mes en curso.
+ */
+function pointsFor(L, { teammates = [], inTeam = false } = {}) {
+  const entries = [];
+  const add = (key, ym, label, pts) => entries.push({ key, ym, label, pts });
+  const nowYM = ymFromDate(new Date());
+  const dates = L.transactions.map(t => t.date).sort();
+  const months = [];
+  if (dates.length) { for (let ym = dates[0].slice(0, 7); ym <= nowYM; ym = shiftMonth(ym, 1)) months.push(ym); }
+
+  let planMonths = 0, streak = 0, bestStreak = 0, balancedEver = false, bestDays = 0;
+  for (const ym of months) {
+    const st = monthStats(L, ym);
+    const closed = ym < nowYM;
+    if (st.days) add('dias', ym, `Registraste movimientos ${Math.min(st.days, PTS.maxDays)} días`, Math.min(st.days, PTS.maxDays) * PTS.perDay);
+    bestDays = Math.max(bestDays, st.days);
+    if (!closed) continue;
+    const plan = planFor(L, ym);
+    if (plan.status === 'cumplido') {
+      planMonths++; streak++; bestStreak = Math.max(bestStreak, streak);
+      add('plan', ym, 'Cumpliste tu plan de ahorro', PTS.plan);
+      if (teammates.length && teammates.every(T => planFor(T, ym).status === 'cumplido')) add('equipo', ym, 'Todo el equipo cumplió su plan', PTS.team);
+    } else streak = 0;
+    if (st.budgetOk) add('presupuesto', ym, 'Respetaste todos tus presupuestos', PTS.budget);
+    if (st.balanced) balancedEver = true;
+  }
+
+  const goalsWithTarget = L.goals.filter(g => Number(g.target) > 0);
+  const goalsDone = goalsWithTarget.filter(g => Number(g.saved) >= Number(g.target));
+  const ef = L.goals.find(g => /emergencia/i.test(g.name));
+  const avg = avgExpensesOf(L);
+  const cushion = ef && avg > 0 ? (Number(ef.saved) || 0) / avg : 0;
+
+  const A = [
+    { id: 'primer-paso', icon: '👣', name: 'Primer paso', desc: 'Registra tu primer movimiento', pts: 50, done: L.transactions.length > 0 },
+    { id: 'limites', icon: '🎯', name: 'Con límites', desc: 'Define un presupuesto para una categoría', pts: 50, done: L.categories.some(c => Number(c.budget) > 0) },
+    { id: 'sonador', icon: '🌟', name: 'Soñador', desc: 'Crea una meta con monto objetivo', pts: 50, done: goalsWithTarget.length > 0 },
+    { id: 'constante', icon: '📅', name: 'Constante', desc: 'Registra movimientos 20 días en un mismo mes', pts: 200, done: bestDays >= 20, progress: Math.min(1, bestDays / 20) },
+    { id: 'ahorrador', icon: '🐷', name: 'Ahorrador', desc: 'Cumple tu plan de ahorro un mes', pts: 100, done: planMonths >= 1 },
+    { id: 'racha-3', icon: '🔥', name: 'En racha', desc: 'Cumple tu plan 3 meses seguidos', pts: 300, done: bestStreak >= 3, progress: Math.min(1, bestStreak / 3) },
+    { id: 'racha-6', icon: '🚀', name: 'Imparable', desc: 'Cumple tu plan 6 meses seguidos', pts: 800, done: bestStreak >= 6, progress: Math.min(1, bestStreak / 6) },
+    { id: 'equilibrio', icon: '⚖️', name: 'Equilibrio', desc: 'Un mes cumpliendo la regla 50/30/20', pts: 150, done: balancedEver },
+    { id: 'colchon', icon: '🛟', name: 'Colchón', desc: 'Fondo de emergencia de 3 meses de gastos', pts: 400, done: cushion >= 3, progress: Math.min(1, cushion / 3) },
+    { id: 'meta', icon: '🏆', name: 'Meta lograda', desc: 'Completa una meta de ahorro (500 por cada una)', pts: 500 * Math.max(1, goalsDone.length), done: goalsDone.length > 0 },
+    { id: 'equipo', icon: '🤝', name: 'En equipo', desc: 'Comparte un espacio con tu pareja', pts: 100, done: inTeam }
+  ];
+  for (const a of A) if (a.done) add('logro', null, `Logro: ${a.name}`, a.pts);
+
+  const earned = sum(entries.map(e => e.pts));
+  const r = rayOf(L);
+  const spent = Number(r.spent) || 0;
+  const level = Math.floor(earned / LEVEL_SIZE) + 1;
+  return {
+    earned, spent, available: Math.max(0, earned - spent),
+    level, levelProgress: (earned % LEVEL_SIZE) / LEVEL_SIZE, toNext: LEVEL_SIZE - (earned % LEVEL_SIZE),
+    entries: entries.sort((a, b) => (b.ym || '9999') .localeCompare(a.ym || '9999')),
+    achievements: A
+  };
+}
+
+/** Puntos de la persona que usa la app (con sus compañeros de equipo, si comparten). */
+function myPoints() {
+  const teammates = sharing.partners.filter(p => p.status === 'ok' && stores['user:' + p.uid]).map(p => stores['user:' + p.uid]);
+  return pointsFor(stores.personal, { teammates, inTeam: sharing.spaces.length > 0 });
+}
+
+/** Puntos nuevos desde la última vez (para que Ray lo celebre). */
+function newPointsSinceLastVisit(total) {
+  const key = 'rf-seen-pts-' + (window.Cloud?.uid || 'local');
+  let seen = null;
+  try { seen = localStorage.getItem(key); } catch { /* sin acceso */ }
+  try { localStorage.setItem(key, String(total)); } catch { /* sin acceso */ }
+  if (seen === null) return { gained: total, first: true }; // primera vez: celebrar lo ganado con el historial
+  return { gained: Math.max(0, total - Number(seen)), first: false };
+}
+
+/** Tarjeta de puntos y logros (en Metas). */
+function pointsCard() {
+  const P = myPoints();
+  const recent = P.entries.slice(0, 8).map(e => `<div class="pt-row"><span class="grow">${esc(e.label)}${e.ym ? ` <small>· ${esc(monthName(e.ym, { month: 'short', year: 'numeric' }))}</small>` : ''}</span><b class="ing">+${e.pts}</b></div>`).join('');
+  const badges = P.achievements.map(a => `
+    <div class="badge ${a.done ? 'done' : ''}" title="${esc(a.desc)}">
+      <div class="badge-ico">${a.icon}</div>
+      <div class="badge-name">${esc(a.name)}</div>
+      <div class="badge-desc">${esc(a.desc)}</div>
+      ${!a.done && a.progress ? `<div class="bar"><div class="fill" style="width:${Math.round(a.progress * 100)}%"></div></div>` : ''}
+      <div class="badge-pts">${a.done ? '✓ ' : ''}${a.pts} pts</div>
+    </div>`).join('');
+  return `<div class="card points-card">
+    <div class="card-head"><h2>Puntos y logros</h2><button class="btn small primary" data-action="ray-closet">Armario de Ray</button></div>
+    <div class="pts-hero">
+      <div><div class="pts-big">${P.available.toLocaleString('es')}</div><small>puntos disponibles</small></div>
+      <div class="pts-level"><b>Nivel ${P.level}</b><div class="bar"><div class="fill" style="width:${Math.round(P.levelProgress * 100)}%"></div></div><small>${P.toNext} pts para el nivel ${P.level + 1}</small></div>
+    </div>
+    <div class="subhead">Cómo ganar puntos</div>
+    <div class="how">
+      <div><b>+${PTS.plan}</b><span>cumplir tu plan del mes</span></div>
+      <div><b>+${PTS.budget}</b><span>respetar tus presupuestos</span></div>
+      <div><b>+${PTS.perDay}</b><span>por día con registros (máx. ${PTS.maxDays})</span></div>
+      <div><b>+${PTS.team}</b><span>si todo el equipo cumple</span></div>
+    </div>
+    <div class="subhead">Logros · ${P.achievements.filter(a => a.done).length} de ${P.achievements.length}</div>
+    <div class="badges">${badges}</div>
+    ${recent ? `<div class="subhead">Últimos puntos ganados</div><div class="pt-list">${recent}</div>` : ''}
+    <p class="muted" style="margin:12px 0 0;font-size:.78rem">Total ganado: ${P.earned.toLocaleString('es')} · gastado en Ray: ${P.spent.toLocaleString('es')}. El plan, el presupuesto y el equipo cuentan al cerrar cada mes.</p>
+  </div>`;
+}
+
+function confetti() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const box = document.createElement('div');
+  box.className = 'confetti';
+  const colors = ['#c8f031', '#ffd23f', '#2fd6b0', '#ff6f59', '#9b5cff', '#ffffff'];
+  box.innerHTML = Array.from({ length: 70 }, (_, i) =>
+    `<i style="left:${Math.random() * 100}%;background:${colors[i % colors.length]};animation-delay:${Math.random() * .5}s;animation-duration:${1.6 + Math.random() * 1.4}s;transform:rotate(${Math.random() * 360}deg)"></i>`).join('');
+  // Encima de cualquier ventana abierta (p. ej. el armario)
+  (document.querySelector('dialog[open]') || document.body).appendChild(box);
+  setTimeout(() => box.remove(), 3600);
+}
+
 /* ---------- UI general ---------- */
 
 let currentYM = ymFromDate(new Date());
@@ -585,7 +742,7 @@ function tipsFor(txs, ing, gas, byCat) {
 
 /* ---------- Ray ---------- */
 
-const RAY_DEFAULT = { skin: 'lima', hat: null, eyes: null, neck: null, owned: [] };
+const RAY_DEFAULT = { skin: 'lima', hat: null, eyes: null, neck: null, owned: [], spent: 0 };
 const rayOf = L => ({ ...RAY_DEFAULT, ...((L && L.settings && L.settings.ray) || {}) });
 const RAY_MOODS = { feliz: 'feliz', normal: 'tranquilo', preocupado: 'preocupado', dormido: 'te extraña' };
 
@@ -621,7 +778,8 @@ function rayCard(c, txs, ing, gas, byCat) {
       const L = m.me ? stores.personal : stores['user:' + m.uid];
       const r = rayOf(L);
       const name = m.me ? 'Tú' : firstName(m.name || m.email);
-      return `<div class="ray-mini">${Ray.svg({ mood: L ? rayMoodFor(L) : 'normal', ...r })}<span>${esc(name)}</span></div>`;
+      const lvl = L ? (m.me ? myPoints().level : pointsFor(L).level) : null;
+      return `<div class="ray-mini">${Ray.svg({ mood: L ? rayMoodFor(L) : 'normal', ...r })}<span>${esc(name)}${lvl ? ` · Nv. ${lvl}` : ''}</span></div>`;
     }).join('');
     stage = `<div class="ray-pair">${pair}</div>`;
     title = 'Los Rays de la casa';
@@ -640,7 +798,8 @@ function rayCard(c, txs, ing, gas, byCat) {
     const mood = rayMoodFor(L);
     const r = rayOf(L);
     stage = `<button class="ray-stage" data-action="${c.kind === 'personal' ? 'ray-closet' : 'ray-partner'}" aria-label="Personalizar a Ray">${Ray.svg({ mood, ...r })}</button>`;
-    title = c.kind === 'personal' ? `Ray <span>· ${RAY_MOODS[mood]}</span>` : `Ray de ${esc(c.short)} <span>· ${RAY_MOODS[mood]}</span>`;
+    const lvl = c.kind === 'personal' ? myPoints().level : pointsFor(L).level;
+    title = c.kind === 'personal' ? `Ray <span>· Nv. ${lvl} · ${RAY_MOODS[mood]}</span>` : `Ray de ${esc(c.short)} <span>· Nv. ${lvl} · ${RAY_MOODS[mood]}</span>`;
     if (mood === 'dormido' && c.kind === 'personal') {
       const last = L.transactions.reduce((m, t) => t.date > m ? t.date : m, '');
       const d = Math.floor((Date.now() - parseDate(last).getTime()) / 864e5);
@@ -650,6 +809,17 @@ function rayCard(c, txs, ing, gas, byCat) {
       const p = planFor(L, ymFromDate(new Date()));
       if (p.status === 'cumpliendo') tips.unshift(`¡Lo lograste! Ya ahorraste <b>${esc(fmt(p.saved))}</b> y superaste tu meta del mes 🎉`);
       else if (p.status === 'en-riesgo') tips.unshift(`Ojo: te pasaste <b>${esc(fmt(-p.canSpend))}</b> de lo que permite tu plan de ahorro. Frena los gustos este mes.`);
+      // Lo primero que dice: los puntos nuevos
+      const P = myPoints();
+      const { gained, first } = newPointsSinceLastVisit(P.earned);
+      if (gained > 0) {
+        const latest = P.entries.find(e => e.ym) || P.entries[0];
+        const why = first ? 'Por todo lo que ya llevas registrado.'
+          : latest && gained <= latest.pts ? esc(latest.label) + '.'
+          : 'Por tus logros y tu historial.';
+        tips.unshift(`¡Ganaste <b>+${gained.toLocaleString('es')} puntos</b>! 🎉 ${why} Ya tienes <b>${P.available.toLocaleString('es')}</b> para gastar en mi armario.`);
+        setTimeout(confetti, 350);
+      }
     }
   }
   if (!tips.length) tips = ['¡Hola! Estoy aquí para ayudarte a cuidar tu dinero.'];
@@ -682,9 +852,9 @@ function saveRay(r) {
 function renderCloset() {
   const r = rayOf(stores.personal);
   const owned = rayOwned(r);
-  const points = 0; // Fase 3: puntos por cumplir el plan, presupuesto, rachas…
+  const points = myPoints().available;
   $('#closetPreview').innerHTML = Ray.svg({ mood: 'feliz', ...r });
-  $('#closetPoints').innerHTML = `<b>${points}</b> puntos`;
+  $('#closetPoints').innerHTML = `<b>${points.toLocaleString('es')}</b> puntos`;
   $('#closetTabs').innerHTML = Object.entries(Ray.SLOTS).map(([k, v]) =>
     `<button class="pill sm ${k === closetSlot ? 'active' : ''}" data-action="closet-slot" data-slot="${k}">${v}</button>`).join('');
   const items = Ray.CATALOG.filter(i => i.slot === closetSlot);
@@ -700,7 +870,7 @@ function renderCloset() {
     return `<button class="closet-item ${on ? 'on' : ''} ${have ? '' : 'locked'}" data-action="closet-pick" data-slot="${it.slot}" data-id="${it.id}">
       <div class="ci-art">${Ray.svg(preview)}</div>
       <span class="ci-name">${esc(Ray.itemName(it))}</span>
-      <span class="ci-state">${on ? 'Puesto' : have ? (it.price === 0 ? 'Regalo' : 'Tuyo') : `🔒 ${it.price} pts`}</span>
+      <span class="ci-state">${on ? 'Puesto' : have ? (it.price === 0 ? 'Regalo' : 'Tuyo') : points >= it.price ? `⚡ ${it.price} pts` : `🔒 ${it.price} pts`}</span>
     </button>`;
   }).join('');
 }
@@ -716,7 +886,20 @@ function pickClosetItem(slot, id) {
   if (!id) { r[slot] = null; saveRay(r); renderCloset(); render(); return; }
   const it = Ray.CATALOG.find(i => i.slot === slot && i.id === id);
   if (!rayOwned(r).has(slot + ':' + id)) {
-    toast(`Necesitas ${it.price} puntos. Muy pronto podrás ganarlos cumpliendo tu plan de ahorro ⚡`);
+    const available = myPoints().available;
+    if (available < it.price) {
+      toast(`Te faltan ${(it.price - available).toLocaleString('es')} puntos para ${Ray.itemName(it)}. ¡Cumple tu plan para ganarlos! ⚡`);
+      return;
+    }
+    if (!confirm(`¿Comprar «${Ray.itemName(it)}» por ${it.price} puntos?`)) return;
+    r.owned = [...(r.owned || []), slot + ':' + id];
+    r.spent = (Number(r.spent) || 0) + it.price;
+    r[slot] = id;
+    saveRay(r);
+    renderCloset();
+    render();
+    confetti();
+    toast(`¡Nuevo para Ray: ${Ray.itemName(it)}! 🎉`);
     return;
   }
   r[slot] = slot !== 'skin' && r[slot] === id ? null : id;
@@ -964,7 +1147,7 @@ function renderPresupuesto() {
 function renderMetas() {
   const avg = avgMonthlyExpenses();
   const c = currentCtx();
-  const planBlock = c.kind === 'personal' ? planSettingsCard()
+  const planBlock = c.kind === 'personal' ? planSettingsCard() + pointsCard()
     : c.kind === 'partner' ? planCard(state, { who: c.short })
     : `<div class="card ledger-note">${ICONS.users}<div>Cada integrante configura su plan de ahorro en <b>sus finanzas personales</b> (selector <b>Yo</b>). Aquí, en Inicio, ven los planes de los dos.</div></div>`;
   $('#view-metas').innerHTML = `

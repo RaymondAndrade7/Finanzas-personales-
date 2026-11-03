@@ -101,6 +101,21 @@ Ray es el personaje de RayFin: una chispa de energía que vive en tu **Inicio** 
 - **Tócalo para abrir su armario** y cambiarle el color, la gorra, los lentes o lo que lleva en el cuello. Hay regalos de bienvenida; el resto se desbloqueará con puntos.
 - En un **espacio compartido** aparecen los Rays de cada integrante, juntos.
 
+## 🏆 Puntos y logros
+
+Ganas puntos por buenos hábitos y los gastas en el **armario de Ray**. Los ves en **Metas → Puntos y logros**.
+
+| Cada mes | Puntos |
+|---|---|
+| Cumplir tu plan de ahorro (al cerrar el mes) | +300 |
+| Respetar todos tus presupuestos (al cerrar el mes) | +150 |
+| Registrar movimientos: 5 por día con registros (máx. 20 días) | hasta +100 |
+| En pareja: todo el equipo cumplió su plan | +200 |
+
+Además hay **11 logros** de una sola vez (primer movimiento, rachas de 3 y 6 meses, regla 50/30/20, fondo de emergencia de 3 meses, metas cumplidas, etc.). Cada 500 puntos Ray sube de **nivel**, y cuando ganas puntos Ray lo celebra con confeti.
+
+Los puntos se calculan a partir de tus datos, así que son los mismos en todos tus dispositivos.
+
 ## 👥 Finanzas compartidas (pareja, familia, roommates)
 
 Requiere el modo con cuentas (Firebase).
