@@ -747,3 +747,69 @@ body.read-only .tx { cursor: default; }
   font-size: clamp(.82rem, 3.7vw, .98rem); letter-spacing: -0.02em;
 }
 .field small { font-weight: 500; color: var(--muted); }
+
+/* ---------- Ray ---------- */
+.ray-card { display: flex; align-items: center; gap: 12px; padding: 12px 16px 12px 8px; overflow: hidden; }
+.ray-stage { border: 0; background: none; padding: 0; cursor: pointer; flex: none; width: 112px; height: 112px; border-radius: 20px; }
+.ray-stage:hover { background: var(--surface-2); }
+.ray-stage .ray { width: 100%; height: 100%; }
+.ray-bubble { position: relative; flex: 1; min-width: 0; background: var(--surface-2); border-radius: 16px; padding: 12px 14px; cursor: pointer; }
+.ray-bubble::before { content: ""; position: absolute; left: -7px; top: 26px; width: 14px; height: 14px; background: inherit; transform: rotate(45deg); border-radius: 3px; }
+.ray-name { font-weight: 800; font-size: .9rem; letter-spacing: -0.02em; }
+.ray-name span { color: var(--muted); font-weight: 600; }
+.ray-bubble p { margin: 4px 0 0; font-size: .9rem; line-height: 1.4; }
+.ray-more { display: block; margin-top: 6px; font-size: .72rem; color: var(--muted); }
+.ray-pair { display: flex; flex: none; gap: 0; }
+.ray-mini { display: flex; flex-direction: column; align-items: center; width: 74px; font-size: .72rem; font-weight: 700; color: var(--muted); }
+.ray-mini .ray { width: 74px; height: 74px; }
+
+/* Animaciones: flotar, parpadear, saltar de alegría, destellos, zzz */
+.ray .ray-body { transform-box: fill-box; transform-origin: 50% 100%; animation: rayFloat 3.2s ease-in-out infinite; }
+.ray .ray-shadow { transform-box: fill-box; transform-origin: center; animation: rayShadow 3.2s ease-in-out infinite; }
+.ray .ray-blink { transform-box: fill-box; transform-origin: center; animation: rayBlink 4.6s infinite; }
+.ray .ray-spark { transform-box: fill-box; transform-origin: center; animation: raySpark 2.4s ease-in-out infinite; }
+.ray .ray-spark.s2 { animation-delay: 1.1s; }
+.ray-feliz .ray-body { animation: rayHop 1.6s cubic-bezier(.3, .7, .4, 1) infinite; }
+.ray-feliz .ray-shadow { animation: rayShadowHop 1.6s cubic-bezier(.3, .7, .4, 1) infinite; }
+.ray-preocupado .ray-body { animation: rayWorry 2.6s ease-in-out infinite; }
+.ray-dormido .ray-body { animation: rayFloat 5s ease-in-out infinite; }
+.ray-zzz { animation: rayZzz 2.8s ease-in-out infinite; }
+.ray-talk .ray-body { animation: rayTalk .45s ease-out; }
+@keyframes rayFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes rayShadow { 0%, 100% { transform: scaleX(1); opacity: .3; } 50% { transform: scaleX(.85); opacity: .2; } }
+@keyframes rayHop { 0%, 100% { transform: translateY(0) scale(1, 1); } 12% { transform: translateY(0) scale(1.06, .94); } 40% { transform: translateY(-16px) scale(.97, 1.04); } 70% { transform: translateY(0) scale(1.04, .96); } }
+@keyframes rayShadowHop { 0%, 100%, 70% { transform: scaleX(1); } 40% { transform: scaleX(.7); opacity: .15; } }
+@keyframes rayWorry { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-3deg); } 75% { transform: rotate(3deg); } }
+@keyframes rayBlink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+@keyframes raySpark { 0%, 100% { transform: scale(1); opacity: .9; } 50% { transform: scale(.4); opacity: .3; } }
+@keyframes rayZzz { 0% { transform: translateY(4px); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateY(-10px); opacity: 0; } }
+@keyframes rayTalk { 0% { transform: scale(1); } 40% { transform: scale(1.08, .94); } 100% { transform: scale(1); } }
+
+/* Armario */
+.closet-dialog { width: min(520px, calc(100vw - 32px)); }
+@media (max-width: 600px) { .closet-dialog { width: 100%; max-width: 100%; } }
+.closet { padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.closet-head { display: flex; align-items: center; gap: 10px; }
+.closet-head h2 { margin: 0; flex: 1; }
+.closet-points { font-size: .85rem; color: var(--muted); background: var(--surface-2); border-radius: 999px; padding: 4px 12px; }
+.closet-points b { color: var(--accent); }
+.closet-preview { height: 190px; display: grid; place-items: center; border-radius: 18px;
+  background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 65%), var(--surface-2); }
+.closet-preview .ray { width: 180px; height: 180px; }
+.closet-hint { margin: 0; font-size: .82rem; color: var(--muted); text-align: center; }
+.closet-tabs { justify-content: center; }
+.closet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; max-height: 38vh; overflow-y: auto; padding: 2px; }
+.closet-item { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 6px 10px; border-radius: 14px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; }
+.closet-item:hover { border-color: var(--surface-3); }
+.closet-item.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.closet-item.locked .ci-art { filter: grayscale(.85) brightness(.75); }
+.ci-art { width: 72px; height: 72px; }
+.ci-art .ray { width: 100%; height: 100%; }
+.ci-art .ray .ray-body, .ci-art .ray .ray-shadow { animation: none; }
+.ci-name { font-size: .76rem; font-weight: 700; text-align: center; line-height: 1.2; }
+.ci-state { font-size: .7rem; color: var(--muted); }
+.closet-item.on .ci-state { color: var(--accent); font-weight: 700; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ray *, .ray { animation: none !important; }
+}

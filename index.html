@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="styles.css?v=20261103n">
+  <link rel="stylesheet" href="styles.css?v=20261103p">
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 </head>
 <body class="splash-on">
@@ -214,13 +214,29 @@
     </form>
   </dialog>
 
+  <!-- Armario de Ray -->
+  <dialog id="rayDialog" class="closet-dialog">
+    <div class="closet">
+      <div class="closet-head">
+        <h2>Mi Ray</h2>
+        <span class="closet-points" id="closetPoints"></span>
+        <button type="button" class="icon-btn" data-close aria-label="Cerrar">✕</button>
+      </div>
+      <div class="closet-preview" id="closetPreview"></div>
+      <p class="closet-hint">Ponle ropa y accesorios. Gana puntos cumpliendo tu plan de ahorro para desbloquear más (muy pronto).</p>
+      <div class="pills closet-tabs" id="closetTabs"></div>
+      <div class="closet-grid" id="closetGrid"></div>
+    </div>
+  </dialog>
+
   <input type="file" id="importFile" accept="application/json,.json" hidden>
   <div id="toast" role="status" aria-live="polite"></div>
 
-  <script src="firebase-config.js?v=20261103n"></script>
-  <script src="app.js?v=20261103n"></script>
-  <script src="auth-bg.js?v=20261103n"></script>
-  <script src="splash.js?v=20261103n"></script>
-  <script type="module" src="cloud.js?v=20261103n"></script>
+  <script src="firebase-config.js?v=20261103p"></script>
+  <script src="ray.js?v=20261103p"></script>
+  <script src="app.js?v=20261103p"></script>
+  <script src="auth-bg.js?v=20261103p"></script>
+  <script src="splash.js?v=20261103p"></script>
+  <script type="module" src="cloud.js?v=20261103p"></script>
 </body>
 </html>

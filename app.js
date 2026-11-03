@@ -39,7 +39,7 @@ function defaultState() {
   const ingresos = ['Salario', 'Negocio', 'Extras', 'Otros ingresos'];
   return {
     version: 1,
-    settings: { currency: 'USD', plan: { mode: 'pct', pct: 20, fixed: 0, expected: 0 } },
+    settings: { currency: 'USD', plan: { mode: 'pct', pct: 20, fixed: 0, expected: 0 }, ray: { skin: 'lima', hat: null, eyes: null, neck: null, owned: [] } },
     categories: [
       ...gastos.map(([n, g], i) => cat(n, 'gasto', g, i)),
       ...ingresos.map((n, i) => cat(n, 'ingreso', null, i + 6))
@@ -553,7 +553,7 @@ function donut(items, total) {
     <circle r="15.9155" cx="21" cy="21" fill="transparent" stroke="var(--track)" stroke-width="6"/>${segs}</svg>`;
 }
 
-function insightsCard(txs, ing, gas, byCat) {
+function tipsFor(txs, ing, gas, byCat) {
   const tips = [];
   if (!state.transactions.length) {
     tips.push('Bienvenido 👋 Toca el botón <b>+</b> para registrar tu primer ingreso o gasto.');
@@ -580,7 +580,149 @@ function insightsCard(txs, ing, gas, byCat) {
       tips.push(`Tu fondo de emergencia cubre ${((Number(ef.saved) || 0) / avg).toFixed(1)} meses de gastos. Lo ideal son 3 a 6.`);
     }
   }
-  return `<div class="card tips"><h2>Consejos</h2><ul>${tips.map(t => `<li>${t}</li>`).join('')}</ul></div>`;
+  return tips;
+}
+
+/* ---------- Ray ---------- */
+
+const RAY_DEFAULT = { skin: 'lima', hat: null, eyes: null, neck: null, owned: [] };
+const rayOf = L => ({ ...RAY_DEFAULT, ...((L && L.settings && L.settings.ray) || {}) });
+const RAY_MOODS = { feliz: 'feliz', normal: 'tranquilo', preocupado: 'preocupado', dormido: 'te extraña' };
+
+/** Ánimo de Ray según las finanzas de este mes (siempre el mes real, no el que se está mirando). */
+function rayMoodFor(L) {
+  if (!L || !L.transactions.length) return 'normal';
+  const last = L.transactions.reduce((m, t) => t.date > m ? t.date : m, '');
+  const days = Math.floor((Date.now() - parseDate(last).getTime()) / 864e5);
+  if (days >= 7) return 'dormido';
+  const ym = ymFromDate(new Date());
+  const p = planFor(L, ym);
+  let ing = 0, gas = 0;
+  const spent = new Map();
+  for (const t of L.transactions) {
+    if (!t.date.startsWith(ym)) continue;
+    if (t.type === 'ingreso') ing += t.amount;
+    if (t.type === 'gasto') { gas += t.amount; spent.set(t.categoryId, (spent.get(t.categoryId) || 0) + t.amount); }
+  }
+  const over = L.categories.some(c => c.type === 'gasto' && Number(c.budget) > 0 && (spent.get(c.id) || 0) > Number(c.budget));
+  if (p.status === 'en-riesgo' || over || (ing > 0 && gas > ing)) return 'preocupado';
+  if (p.status === 'cumpliendo' || p.status === 'cumplido') return 'feliz';
+  return 'normal';
+}
+
+let rayTips = [], rayIdx = 0;
+
+/** Ray en Inicio, con lo que tiene que decir. */
+function rayCard(c, txs, ing, gas, byCat) {
+  let tips = tipsFor(txs, ing, gas, byCat);
+  let stage, title;
+  if (c.kind === 'space') {
+    const pair = c.space.members.slice(0, 3).map(m => {
+      const L = m.me ? stores.personal : stores['user:' + m.uid];
+      const r = rayOf(L);
+      const name = m.me ? 'Tú' : firstName(m.name || m.email);
+      return `<div class="ray-mini">${Ray.svg({ mood: L ? rayMoodFor(L) : 'normal', ...r })}<span>${esc(name)}</span></div>`;
+    }).join('');
+    stage = `<div class="ray-pair">${pair}</div>`;
+    title = 'Los Rays de la casa';
+    let saved = 0, target = 0;
+    for (const m of c.space.members) {
+      const L = m.me ? stores.personal : stores['user:' + m.uid];
+      if (!L) continue;
+      const p = planFor(L, ymFromDate(new Date()));
+      if (p.status !== 'sin-plan') { saved += p.saved; target += p.target; }
+    }
+    if (target > 0) tips.unshift(saved >= target
+      ? `¡Equipo! Juntos ya ahorraron <b>${esc(fmt(saved))}</b> y superaron su meta de ${esc(fmt(target))} este mes 🎉`
+      : `Juntos llevan <b>${esc(fmt(saved))}</b> de ${esc(fmt(target))} de su meta de ahorro del mes. ¡Vamos!`);
+  } else {
+    const L = c.kind === 'personal' ? stores.personal : state;
+    const mood = rayMoodFor(L);
+    const r = rayOf(L);
+    stage = `<button class="ray-stage" data-action="${c.kind === 'personal' ? 'ray-closet' : 'ray-partner'}" aria-label="Personalizar a Ray">${Ray.svg({ mood, ...r })}</button>`;
+    title = c.kind === 'personal' ? `Ray <span>· ${RAY_MOODS[mood]}</span>` : `Ray de ${esc(c.short)} <span>· ${RAY_MOODS[mood]}</span>`;
+    if (mood === 'dormido' && c.kind === 'personal') {
+      const last = L.transactions.reduce((m, t) => t.date > m ? t.date : m, '');
+      const d = Math.floor((Date.now() - parseDate(last).getTime()) / 864e5);
+      tips.unshift(`¡Hola! Hace <b>${d} días</b> que no registras nada. ¿Me cuentas en qué gastaste? Toca <b>+</b> 💤`);
+    }
+    if (c.kind === 'personal') {
+      const p = planFor(L, ymFromDate(new Date()));
+      if (p.status === 'cumpliendo') tips.unshift(`¡Lo lograste! Ya ahorraste <b>${esc(fmt(p.saved))}</b> y superaste tu meta del mes 🎉`);
+      else if (p.status === 'en-riesgo') tips.unshift(`Ojo: te pasaste <b>${esc(fmt(-p.canSpend))}</b> de lo que permite tu plan de ahorro. Frena los gustos este mes.`);
+    }
+  }
+  if (!tips.length) tips = ['¡Hola! Estoy aquí para ayudarte a cuidar tu dinero.'];
+  rayTips = tips;
+  rayIdx = 0;
+  return `<div class="card ray-card">
+    ${stage}
+    <div class="ray-bubble" data-action="ray-next" role="button" tabindex="0">
+      <div class="ray-name">${title}</div>
+      <p id="rayMsg">${tips[0]}</p>
+      ${tips.length > 1 ? `<span class="ray-more" id="rayMore">1/${tips.length} · toca para ver más</span>` : ''}
+    </div>
+  </div>`;
+}
+
+/* ---------- Armario de Ray ---------- */
+let closetSlot = 'skin';
+
+function rayOwned(r) {
+  return new Set([...Ray.CATALOG.filter(i => i.price === 0).map(i => i.slot + ':' + i.id), ...(r.owned || [])]);
+}
+
+function saveRay(r) {
+  const P = stores.personal;
+  P.settings.ray = r;
+  if (cloudOn()) window.Cloud.saveMeta('personal', P).catch(cloudFail);
+  else if (P === state) save();
+}
+
+function renderCloset() {
+  const r = rayOf(stores.personal);
+  const owned = rayOwned(r);
+  const points = 0; // Fase 3: puntos por cumplir el plan, presupuesto, rachas…
+  $('#closetPreview').innerHTML = Ray.svg({ mood: 'feliz', ...r });
+  $('#closetPoints').innerHTML = `<b>${points}</b> puntos`;
+  $('#closetTabs').innerHTML = Object.entries(Ray.SLOTS).map(([k, v]) =>
+    `<button class="pill sm ${k === closetSlot ? 'active' : ''}" data-action="closet-slot" data-slot="${k}">${v}</button>`).join('');
+  const items = Ray.CATALOG.filter(i => i.slot === closetSlot);
+  const none = closetSlot === 'skin' ? '' : `
+    <button class="closet-item ${!r[closetSlot] ? 'on' : ''}" data-action="closet-pick" data-slot="${closetSlot}" data-id="">
+      <div class="ci-art">${Ray.svg({ mood: 'normal', ...r, [closetSlot]: null })}</div><span class="ci-name">Nada</span><span class="ci-state">${!r[closetSlot] ? 'Puesto' : ''}</span>
+    </button>`;
+  $('#closetGrid').innerHTML = none + items.map(it => {
+    const key = it.slot + ':' + it.id;
+    const have = owned.has(key);
+    const on = r[it.slot] === it.id;
+    const preview = { mood: 'normal', ...r, [it.slot]: it.id };
+    return `<button class="closet-item ${on ? 'on' : ''} ${have ? '' : 'locked'}" data-action="closet-pick" data-slot="${it.slot}" data-id="${it.id}">
+      <div class="ci-art">${Ray.svg(preview)}</div>
+      <span class="ci-name">${esc(Ray.itemName(it))}</span>
+      <span class="ci-state">${on ? 'Puesto' : have ? (it.price === 0 ? 'Regalo' : 'Tuyo') : `🔒 ${it.price} pts`}</span>
+    </button>`;
+  }).join('');
+}
+
+function openCloset() {
+  closetSlot = 'skin';
+  renderCloset();
+  $('#rayDialog').showModal();
+}
+
+function pickClosetItem(slot, id) {
+  const r = rayOf(stores.personal);
+  if (!id) { r[slot] = null; saveRay(r); renderCloset(); render(); return; }
+  const it = Ray.CATALOG.find(i => i.slot === slot && i.id === id);
+  if (!rayOwned(r).has(slot + ':' + id)) {
+    toast(`Necesitas ${it.price} puntos. Muy pronto podrás ganarlos cumpliendo tu plan de ahorro ⚡`);
+    return;
+  }
+  r[slot] = slot !== 'skin' && r[slot] === id ? null : id;
+  saveRay(r);
+  renderCloset();
+  render();
 }
 
 function rule503020(txs, ing) {
@@ -668,6 +810,7 @@ function renderInicio() {
       ${quick('transferencia', 'Transferir', ICONS.swap)}
       <button class="q" data-action="goto" data-view="metas"><span class="q-ico">${ICONS.flag}</span>Metas</button>
     </div>
+    ${rayCard(c, txs, ing, gas, byCat)}
     <div class="stats">
       ${stat('Ingresos', fmtS(ing), 'ing')}
       ${stat('Gastos', fmtS(gas), 'gas')}
@@ -687,7 +830,6 @@ function renderInicio() {
       }).join('') : empty('No tienes cuentas. Agrégalas en Ajustes.')}
     </div>
     ${c.kind === 'space' ? contributionsCard(c.space, txs) : ''}
-    ${insightsCard(txs, ing, gas, byCat)}
     <div class="card">
       <h2>Gastos por categoría</h2>
       ${byCat.length ? `<div class="donut-wrap">${donut(byCat, gas)}
@@ -1242,6 +1384,19 @@ document.addEventListener('click', e => {
       save(); render();
       break;
     case 'quick': openTx(null, btn.dataset.type); break;
+    case 'ray-closet': openCloset(); break;
+    case 'ray-partner': toast('Es el Ray de ' + currentCtx().short + ' 😊'); break;
+    case 'ray-next': {
+      if (rayTips.length < 2) break;
+      rayIdx = (rayIdx + 1) % rayTips.length;
+      $('#rayMsg').innerHTML = rayTips[rayIdx];
+      $('#rayMore').textContent = `${rayIdx + 1}/${rayTips.length} · toca para ver más`;
+      const st = $('.ray-card .ray');
+      if (st) { st.classList.remove('ray-talk'); void st.getBoundingClientRect(); st.classList.add('ray-talk'); }
+      break;
+    }
+    case 'closet-slot': closetSlot = btn.dataset.slot; renderCloset(); break;
+    case 'closet-pick': pickClosetItem(btn.dataset.slot, btn.dataset.id); break;
     case 'plan-mode':
       if (guardRO()) break;
       state.settings.plan = { ...planOf(state), mode: btn.dataset.mode };

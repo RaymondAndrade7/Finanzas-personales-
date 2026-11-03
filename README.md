@@ -93,6 +93,14 @@ En **Metas → Mi plan de ahorro** eliges cuánto apartar cada mes: un **porcent
 - Cuenta como ahorro lo que no gastas de tus ingresos, incluido lo que envías a la categoría *Ahorro e inversión*.
 - En un **espacio compartido** se ven los planes de cada integrante (de quienes comparten sus finanzas personales) y el total que ahorran juntos.
 
+## ⚡ Ray
+
+Ray es el personaje de RayFin: una chispa de energía que vive en tu **Inicio** y te habla en un globo de diálogo (tócalo para ver más consejos).
+
+- **Su ánimo depende de tus finanzas:** feliz si cumples tu plan de ahorro, preocupado si te pasas del presupuesto o del plan, dormido si llevas una semana sin registrar nada.
+- **Tócalo para abrir su armario** y cambiarle el color, la gorra, los lentes o lo que lleva en el cuello. Hay regalos de bienvenida; el resto se desbloqueará con puntos.
+- En un **espacio compartido** aparecen los Rays de cada integrante, juntos.
+
 ## 👥 Finanzas compartidas (pareja, familia, roommates)
 
 Requiere el modo con cuentas (Firebase).
