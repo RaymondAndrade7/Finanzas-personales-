@@ -913,3 +913,25 @@ body.read-only .tx { cursor: default; }
 .recent .dot { width: 8px; height: 8px; }
 .recent b { font-variant-numeric: tabular-nums; color: var(--gas); }
 .recent.ingreso b { color: var(--ing); }
+
+/* ---------- Deudas ---------- */
+.segmented.two { grid-template-columns: repeat(2, 1fr); }
+.segmented input[value="debo"]:checked + span { background: var(--gas); color: #fff; }
+.segmented input[value="medeben"]:checked + span { background: var(--ing); color: #fff; }
+.field-row { display: flex; gap: 10px; }
+.field-row .field { flex: 1; min-width: 0; }
+.field-row .small-field { flex: 0 0 96px; }
+.field-row[hidden], .field.owe-only[hidden] { display: none; }
+.debt { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.debt:last-child { border-bottom: 0; }
+.debt.done { opacity: .6; }
+.debt-head { display: flex; gap: 10px; align-items: flex-start; }
+.debt-head .grow { flex: 1; min-width: 0; }
+.debt-amt { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.debt-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.debt-foot small { color: var(--muted); }
+.free-box { display: flex; flex-direction: column; align-items: center; padding: 14px; margin: 10px 0; border-radius: 16px;
+  background: radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%), var(--surface-2); }
+.free-box small { color: var(--muted); font-size: .78rem; }
+.free-box b { font-size: 1.8rem; font-weight: 800; letter-spacing: -0.03em; }
+.free-box span { font-size: .85rem; color: var(--muted); }

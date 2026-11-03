@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="styles.css?v=20261104f">
+  <link rel="stylesheet" href="styles.css?v=20261104g">
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 </head>
 <body class="splash-on">
@@ -231,6 +231,52 @@
     </form>
   </dialog>
 
+  <!-- Deuda o préstamo -->
+  <dialog id="debtDialog">
+    <form id="debtForm" method="dialog">
+      <h2 id="debtTitle">Nueva deuda o préstamo</h2>
+      <div class="segmented two" role="radiogroup" aria-label="Tipo">
+        <label><input type="radio" name="dir" value="debo" checked><span>Yo debo</span></label>
+        <label><input type="radio" name="dir" value="medeben"><span>Me deben</span></label>
+      </div>
+      <label class="field"><span id="debtNameLabel">¿A quién o qué?</span>
+        <input type="text" name="name" maxlength="60" required placeholder="Ej: Tarjeta Visa">
+      </label>
+      <label class="field owe-only">Tipo
+        <select name="kind">
+          <option value="tarjeta">💳 Tarjeta de crédito</option>
+          <option value="prestamo">🏦 Préstamo</option>
+          <option value="persona">🙋 Persona</option>
+          <option value="otro">📄 Otro</option>
+        </select>
+      </label>
+      <div class="field-row">
+        <label class="field"><span id="debtAmountLabel">Cuánto debes hoy</span>
+          <input type="number" name="amount" min="0.01" step="0.01" inputmode="decimal" required placeholder="0.00">
+        </label>
+        <label class="field small-field">Moneda
+          <select name="currency"></select>
+        </label>
+      </div>
+      <div class="field-row owe-only">
+        <label class="field">Interés anual %
+          <input type="number" name="rate" min="0" step="0.01" inputmode="decimal" placeholder="Ej: 36">
+        </label>
+        <label class="field">Cuota mínima
+          <input type="number" name="minPay" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+        </label>
+        <label class="field small-field">Día de pago
+          <input type="number" name="dueDay" min="1" max="31" step="1" inputmode="numeric" placeholder="15">
+        </label>
+      </div>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" data-close>Cancelar</button>
+        <button type="submit" class="btn primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Armario de Ray -->
   <dialog id="rayDialog" class="closet-dialog">
     <div class="closet">
@@ -249,12 +295,13 @@
   <input type="file" id="importFile" accept="application/json,.json" hidden>
   <div id="toast" role="status" aria-live="polite"></div>
 
-  <script src="firebase-config.js?v=20261104f"></script>
-  <script src="fijos.js?v=20261104f"></script>
-  <script src="ray.js?v=20261104f"></script>
-  <script src="app.js?v=20261104f"></script>
-  <script src="auth-bg.js?v=20261104f"></script>
-  <script src="splash.js?v=20261104f"></script>
-  <script type="module" src="cloud.js?v=20261104f"></script>
+  <script src="firebase-config.js?v=20261104g"></script>
+  <script src="fijos.js?v=20261104g"></script>
+  <script src="deudas.js?v=20261104g"></script>
+  <script src="ray.js?v=20261104g"></script>
+  <script src="app.js?v=20261104g"></script>
+  <script src="auth-bg.js?v=20261104g"></script>
+  <script src="splash.js?v=20261104g"></script>
+  <script type="module" src="cloud.js?v=20261104g"></script>
 </body>
 </html>

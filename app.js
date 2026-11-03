@@ -566,6 +566,7 @@ function pointsFor(L, { teammates = [], inTeam = false } = {}) {
     if (st.balanced) balancedEver = true;
   }
 
+  const debtsPaidOff = (L.debts || []).filter(d => d.dir === 'debo' && debtPaid(L, d) > 0 && debtInfo(L, d).done).length;
   const goalsWithTarget = L.goals.filter(g => Number(g.target) > 0);
   const goalsDone = goalsWithTarget.filter(g => Number(g.saved) >= Number(g.target));
   const ef = L.goals.find(g => /emergencia/i.test(g.name));
@@ -583,7 +584,8 @@ function pointsFor(L, { teammates = [], inTeam = false } = {}) {
     { id: 'equilibrio', icon: '⚖️', name: 'Equilibrio', desc: 'Un mes cumpliendo la regla 50/30/20', pts: 150, done: balancedEver },
     { id: 'colchon', icon: '🛟', name: 'Colchón', desc: 'Fondo de emergencia de 3 meses de gastos', pts: 400, done: cushion >= 3, progress: Math.min(1, cushion / 3) },
     { id: 'meta', icon: '🏆', name: 'Meta lograda', desc: 'Completa una meta de ahorro (500 por cada una)', pts: 500 * Math.max(1, goalsDone.length), done: goalsDone.length > 0 },
-    { id: 'equipo', icon: '🤝', name: 'En equipo', desc: 'Comparte un espacio con tu pareja', pts: 100, done: inTeam }
+    { id: 'equipo', icon: '🤝', name: 'En equipo', desc: 'Comparte un espacio con tu pareja', pts: 100, done: inTeam },
+    { id: 'libre', icon: '🕊️', name: 'Libre de una deuda', desc: 'Salda por completo una deuda (400 por cada una)', pts: 400 * Math.max(1, debtsPaidOff), done: debtsPaidOff > 0 }
   ];
   for (const a of A) if (a.done) add('logro', null, `Logro: ${a.name}`, a.pts);
 
@@ -1210,13 +1212,26 @@ function renderPresupuesto() {
 
 /* ---------- Vista: Metas ---------- */
 
+let metasTab = 'ahorro';
+function metasTabs() {
+  const tabs = [['ahorro', 'Ahorro'], ['deudas', 'Deudas'], ['logros', 'Logros']];
+  return `<div class="pills subtabs">${tabs.map(([k, v]) => `<button class="pill ${metasTab === k ? 'active' : ''}" data-action="metas-tab" data-tab="${k}">${v}</button>`).join('')}</div>`;
+}
+
 function renderMetas() {
-  const avg = avgMonthlyExpenses();
   const c = currentCtx();
-  const planBlock = c.kind === 'personal' ? planSettingsCard() + pointsCard()
+  if (metasTab === 'deudas') { $('#view-metas').innerHTML = metasTabs() + debtsSection(); return; }
+  if (metasTab === 'logros') {
+    $('#view-metas').innerHTML = metasTabs() + (c.kind === 'personal' ? pointsCard()
+      : `<div class="card ledger-note">${ICONS.user}<div>Los puntos y logros son personales: velos en <b>Yo</b>.</div></div>`);
+    return;
+  }
+  const avg = avgMonthlyExpenses();
+  const planBlock = c.kind === 'personal' ? planSettingsCard()
     : c.kind === 'partner' ? planCard(state, { who: c.short })
     : `<div class="card ledger-note">${ICONS.users}<div>Cada integrante configura su plan de ahorro en <b>sus finanzas personales</b> (selector <b>Yo</b>). Aquí, en Inicio, ven los planes de los dos.</div></div>`;
   $('#view-metas').innerHTML = `
+    ${metasTabs()}
     ${planBlock}
     <div class="card">
       <h2>Fondo de emergencia recomendado</h2>
@@ -1574,6 +1589,7 @@ function openTx(tx = null, type = 'gasto', rec = null) {
     return;
   }
   editingRecId = rec?.id || null;
+  payingDebtId = null;
   if (rec) tx = { ...rec, date: rec.next };
   editingTxId = rec ? null : tx?.id || null;
   txForm.reset();
@@ -1673,6 +1689,9 @@ txForm.addEventListener('submit', e => {
     save();
     setTimeout(() => { runRecurring(ctxKey); render(); }, 0); // si empezó en el pasado, ponerse al día
   }
+  if (payingDebtId && !editingTxId) data.debtId = payingDebtId;
+  const paidDebt = payingDebtId;
+  payingDebtId = null;
   let record;
   if (editingTxId) {
     const i = state.transactions.findIndex(t => t.id === editingTxId);
@@ -1689,6 +1708,10 @@ txForm.addEventListener('submit', e => {
   const ym = data.date.slice(0, 7);
   if (ym !== currentYM) currentYM = ym;
   render();
+  if (paidDebt) {
+    const d = state.debts.find(x => x.id === paidDebt);
+    if (d && debtInfo(state, d).done) { toast(`¡${d.name} quedó saldada! 🕊️`); confetti(); return; }
+  }
   toast(editingTxId ? 'Movimiento actualizado' : freq ? `Guardado y programado: ${REC_FREQ[freq].toLowerCase()} ✓` : 'Movimiento guardado ✓');
 });
 
@@ -1850,6 +1873,20 @@ document.addEventListener('click', e => {
       save(); render();
       break;
     case 'quick': openTx(null, btn.dataset.type); break;
+    case 'metas-tab': metasTab = btn.dataset.tab; setView('metas'); break;
+    case 'debt-new': if (!guardRO()) openDebt(); break;
+    case 'debt-edit': if (!guardRO()) openDebt(state.debts.find(d => d.id === id)); break;
+    case 'debt-pay': if (!guardRO()) payDebt(id); break;
+    case 'debt-del':
+      if (guardRO() || !confirm('¿Eliminar esta deuda? Los pagos registrados se quedan como movimientos.')) break;
+      state.debts = state.debts.filter(d => d.id !== id);
+      save(); render();
+      break;
+    case 'debt-strategy':
+      if (guardRO()) break;
+      state.settings.debtStrategy = btn.dataset.v;
+      save(); render();
+      break;
     case 'budget-tab': budgetTab = btn.dataset.tab; setView('presupuesto'); break;
     case 'rec-new': openTx(null, 'gasto'); txForm.repeat.value = 'mensual'; $('#autoField').hidden = false; break;
     case 'rec-edit': openTx(null, 'gasto', state.recurring.find(r => r.id === id)); break;
@@ -1991,6 +2028,12 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   const t = e.target;
   const d = t.dataset;
+  if ('debtExtra' in d) {
+    if (guardRO()) return;
+    state.settings.debtExtra = Math.max(0, round2(t.value));
+    save(); render();
+    return;
+  }
   if (d.plan) {
     if (guardRO()) return;
     const v = Math.max(0, round2(t.value));
@@ -2142,6 +2185,7 @@ function loadDemo() {
 /* ---------- Inicio ---------- */
 
 applyTheme(getTheme());
+initDebtDialog();
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => applyTheme(getTheme()));
 buildFormatter();
 const VIEWS = ['inicio', 'movimientos', 'presupuesto', 'metas', 'ajustes'];
