@@ -136,7 +136,7 @@ Requiere el modo con cuentas (Firebase).
 
 En `tests/` hay pruebas que abren la app en un navegador real y revisan los flujos importantes: movimientos, plan de ahorro, monedas, pagos fijos, deudas, reportes, puntos, bienvenida, bloqueo y, con el emulador de Firebase, compartir en pareja y las reglas de seguridad.
 
-Se corren solas en GitHub (pestaña **Actions**) en cada cambio. Para correrlas en tu computadora (necesitas Node.js 20 y Java):
+Se corren solas en GitHub (pestaña **Actions**) en cada cambio. Para correrlas en tu computadora (necesitas Node.js 22 y Java):
 
 ```bash
 cd tests

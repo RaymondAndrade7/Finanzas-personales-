@@ -32,8 +32,9 @@ async function setup() {
 }
 
 /** Página en modo local (sin Firebase), con la bienvenida ya vista. */
+// Sin service worker: sus peticiones no pasan por page.route y cargarían la configuración real.
 async function localPage(env, { welcome = false, theme } = {}) {
-  const ctx = await env.browser.newContext({ viewport: { width: 390, height: 844 } });
+  const ctx = await env.browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
   await ctx.route('**/firebase-config.js*', r => r.fulfill({ contentType: 'application/javascript', body: 'window.FIREBASE_CONFIG = {};' }));
   if (!welcome) await ctx.addInitScript(() => { try { if (!localStorage.getItem('mis-finanzas-v1')) localStorage.setItem('mis-finanzas-v1', JSON.stringify({ settings: { onboarded: true } })); } catch (e) {} });
   if (theme) await ctx.addInitScript(t => { try { localStorage.setItem('mf-theme', t); } catch (e) {} }, theme);
@@ -85,7 +86,7 @@ async function verifyEmail(uid) {
 }
 
 async function cloudPage(env) {
-  const ctx = await env.browser.newContext({ viewport: { width: 390, height: 844 } });
+  const ctx = await env.browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
