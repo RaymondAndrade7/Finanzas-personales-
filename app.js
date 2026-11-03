@@ -1893,6 +1893,7 @@ document.addEventListener('click', e => {
       save(); render();
       break;
     case 'quick': openTx(null, btn.dataset.type); break;
+    case 'report-pdf': printReport(); break;
     case 'aportar': openContrib(); break;
     case 'settle': {
       const sp = currentSpace();
