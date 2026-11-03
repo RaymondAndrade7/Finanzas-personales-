@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="styles.css?v=20261104o">
+  <link rel="stylesheet" href="styles.css?v=20261104p">
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 </head>
 <body class="splash-on">
@@ -351,17 +351,25 @@
   <input type="file" id="importFile" accept="application/json,.json" hidden>
   <div id="toast" role="status" aria-live="polite"></div>
 
-  <script src="firebase-config.js?v=20261104o"></script>
-  <script src="fijos.js?v=20261104o"></script>
-  <script src="deudas.js?v=20261104o"></script>
-  <script src="pareja.js?v=20261104o"></script>
-  <script src="reportes.js?v=20261104o"></script>
-  <script src="bienvenida.js?v=20261104o"></script>
-  <script src="bloqueo.js?v=20261104o"></script>
-  <script src="ray.js?v=20261104o"></script>
-  <script src="app.js?v=20261104o"></script>
-  <script src="auth-bg.js?v=20261104o"></script>
-  <script src="splash.js?v=20261104o"></script>
-  <script type="module" src="cloud.js?v=20261104o"></script>
+  <script src="firebase-config.js?v=20261104p"></script>
+  <!-- Funciones (se cargan antes de la app) -->
+  <script src="js/ray.js?v=20261104p"></script>
+  <script src="js/fijos.js?v=20261104p"></script>
+  <script src="js/deudas.js?v=20261104p"></script>
+  <script src="js/pareja.js?v=20261104p"></script>
+  <script src="js/reportes.js?v=20261104p"></script>
+  <script src="js/bienvenida.js?v=20261104p"></script>
+  <script src="js/bloqueo.js?v=20261104p"></script>
+  <!-- App (en orden) -->
+  <script src="js/nucleo.js?v=20261104p"></script>
+  <script src="js/calculos.js?v=20261104p"></script>
+  <script src="js/inicio.js?v=20261104p"></script>
+  <script src="js/vistas.js?v=20261104p"></script>
+  <script src="js/formularios.js?v=20261104p"></script>
+  <script src="js/acciones.js?v=20261104p"></script>
+  <script src="js/arranque.js?v=20261104p"></script>
+  <script src="js/auth-bg.js?v=20261104p"></script>
+  <script src="js/splash.js?v=20261104p"></script>
+  <script type="module" src="js/cloud.js?v=20261104p"></script>
 </body>
 </html>

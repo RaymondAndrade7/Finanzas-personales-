@@ -1,7 +1,34 @@
 // Service worker: permite usar la app sin conexión.
-const CACHE = 'rayfin-v14';
-const ASSETS = ['./', './index.html', './styles.css', './app.js', './cloud.js', './auth-bg.js', './splash.js', './ray.js', './fijos.js', './deudas.js', './pareja.js', './reportes.js', './bienvenida.js', './bloqueo.js', './firebase-config.js', './manifest.json',
-  './icons/rayfin-rf.svg', './icons/rayfin-rf-180.png', './icons/rayfin-rf-192.png', './icons/rayfin-rf-512.png', './icons/rayfin-rf-maskable-512.png'];
+const CACHE = 'rayfin-v15';
+const ASSETS = [
+  './',
+  './index.html',
+  './styles.css',
+  './firebase-config.js',
+  './manifest.json',
+  './js/ray.js',
+  './js/fijos.js',
+  './js/deudas.js',
+  './js/pareja.js',
+  './js/reportes.js',
+  './js/bienvenida.js',
+  './js/bloqueo.js',
+  './js/nucleo.js',
+  './js/calculos.js',
+  './js/inicio.js',
+  './js/vistas.js',
+  './js/formularios.js',
+  './js/acciones.js',
+  './js/arranque.js',
+  './js/auth-bg.js',
+  './js/splash.js',
+  './js/cloud.js',
+  './icons/rayfin-rf.svg',
+  './icons/rayfin-rf-180.png',
+  './icons/rayfin-rf-192.png',
+  './icons/rayfin-rf-512.png',
+  './icons/rayfin-rf-maskable-512.png'
+];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
