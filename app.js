@@ -57,7 +57,7 @@ function defaultState() {
 function normalize(s) {
   const d = defaultState();
   if (!s || typeof s !== 'object') return d;
-  return {
+  const out = {
     version: 1,
     settings: { ...d.settings, ...(s.settings || {}) },
     categories: Array.isArray(s.categories) ? s.categories : d.categories,
@@ -70,6 +70,7 @@ function normalize(s) {
       : [],
     goals: Array.isArray(s.goals) ? s.goals : d.goals
   };
+  return ensureBase(out);
 }
 
 function readLocal() {
@@ -91,6 +92,34 @@ function load() {
   }
   return defaultState();
 }
+
+/* ---------- Varias monedas ---------- */
+// Cada cuenta tiene su moneda. settings.rates[CUR] = cuánto vale 1 CUR en la moneda principal.
+// Cada movimiento en otra moneda guarda `fx` (la tasa de ese día) para que los meses pasados no cambien.
+const baseCur = L => String((L && L.settings && L.settings.currency) || 'USD').trim().toUpperCase();
+const accCur = (L, id) => {
+  const a = L.accounts.find(x => x.id === id);
+  return String((a && a.currency) || baseCur(L)).trim().toUpperCase();
+};
+function rateOf(L, cur) {
+  cur = String(cur || '').toUpperCase();
+  if (!cur || cur === baseCur(L)) return 1;
+  const r = Number(((L.settings && L.settings.rates) || {})[cur]);
+  return r > 0 ? r : null; // null = falta la tasa
+}
+/** Calcula (sin guardarlo) el monto de cada movimiento en la moneda principal. */
+function ensureBase(L) {
+  const base = baseCur(L);
+  for (const t of L.transactions) {
+    const cur = accCur(L, t.accountId);
+    const v = cur === base ? t.amount : t.amount * (Number(t.fx) > 0 ? Number(t.fx) : (rateOf(L, cur) || 1));
+    Object.defineProperty(t, '_b', { value: v, writable: true, configurable: true, enumerable: false });
+  }
+  return L;
+}
+const bv = t => (t._b ?? t.amount);
+/** Monedas de las cuentas que no son la principal. */
+const otherCurrencies = L => [...new Set(L.accounts.map(a => accCur(L, a.id)))].filter(c => c !== baseCur(L));
 
 let state = load();
 
@@ -165,6 +194,20 @@ function buildFormatter() {
 let hideAmounts = false;
 try { hideAmounts = localStorage.getItem('mf-hide') === '1'; } catch { /* sin acceso */ }
 const fmt = n => hideAmounts ? '••••••' : moneyFmt(round2(n));
+const curFmts = new Map();
+/** Formatea en una moneda cualquiera (para cuentas en otra moneda). */
+function fmtC(n, cur) {
+  if (hideAmounts) return '••••••';
+  cur = String(cur || '').toUpperCase();
+  if (!cur || cur === baseCur(state)) return fmt(n);
+  if (!curFmts.has(cur)) {
+    let f;
+    try { const nf = new Intl.NumberFormat('es', { style: 'currency', currency: cur, maximumFractionDigits: 2 }); f = v => nf.format(v); }
+    catch { const nf = new Intl.NumberFormat('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); f = v => `${nf.format(v)} ${cur}`; }
+    curFmts.set(cur, f);
+  }
+  return curFmts.get(cur)(round2(n));
+}
 /** Para recuadros pequeños: sin decimales desde 1.000. */
 const fmtS = n => hideAmounts ? '••••••' : Math.abs(n) >= 1000 ? moneyFmt0(Math.round(n)) : moneyFmt(round2(n));
 
@@ -228,8 +271,8 @@ const monthTx = ym => state.transactions.filter(t => t.date.startsWith(ym));
 function totals(txs) {
   let ing = 0, gas = 0;
   for (const t of txs) {
-    if (t.type === 'ingreso') ing += t.amount;
-    else if (t.type === 'gasto') gas += t.amount;
+    if (t.type === 'ingreso') ing += bv(t);
+    else if (t.type === 'gasto') gas += bv(t);
   }
   return { ing, gas, bal: ing - gas };
 }
@@ -238,7 +281,7 @@ function spendingByCategory(txs) {
   const map = new Map();
   for (const t of txs) {
     if (t.type !== 'gasto') continue;
-    map.set(t.categoryId, (map.get(t.categoryId) || 0) + t.amount);
+    map.set(t.categoryId, (map.get(t.categoryId) || 0) + bv(t));
   }
   return [...map.entries()]
     .map(([id, value]) => ({ cat: catById(id) || { name: 'Sin categoría', color: '#94a3b8', group: 'gusto' }, value }))
@@ -253,15 +296,17 @@ function accountBalances() {
     else if (t.type === 'gasto') b[t.accountId] = (b[t.accountId] || 0) - t.amount;
     else if (t.type === 'transferencia') {
       b[t.accountId] = (b[t.accountId] || 0) - t.amount;
-      b[t.toAccountId] = (b[t.toAccountId] || 0) + t.amount;
+      b[t.toAccountId] = (b[t.toAccountId] || 0) + (Number(t.toAmount) > 0 ? Number(t.toAmount) : t.amount);
     }
   }
   return b;
 }
+/** Valor de un saldo en la moneda principal (con la tasa de hoy). */
+const toBase = (amount, cur) => amount * (rateOf(state, cur) || 1);
 
 function budgetStatus(txs) {
   const spent = new Map();
-  for (const t of txs) if (t.type === 'gasto') spent.set(t.categoryId, (spent.get(t.categoryId) || 0) + t.amount);
+  for (const t of txs) if (t.type === 'gasto') spent.set(t.categoryId, (spent.get(t.categoryId) || 0) + bv(t));
   return state.categories
     .filter(c => c.type === 'gasto')
     .map(c => ({ cat: c, budget: Number(c.budget) || 0, spent: spent.get(c.id) || 0 }));
@@ -288,8 +333,8 @@ function planFor(L, ym) {
   let ing = 0, spend = 0;
   for (const t of L.transactions) {
     if (!t.date.startsWith(ym)) continue;
-    if (t.type === 'ingreso') ing += t.amount;
-    else if (t.type === 'gasto' && (cat(t.categoryId)?.group || 'gusto') !== 'ahorro') spend += t.amount;
+    if (t.type === 'ingreso') ing += bv(t);
+    else if (t.type === 'gasto' && (cat(t.categoryId)?.group || 'gusto') !== 'ahorro') spend += bv(t);
   }
   const base = ing > 0 ? ing : Number(plan.expected) || 0;
   const estimated = ing <= 0 && base > 0;
@@ -445,7 +490,7 @@ function avgMonthlyExpenses() {
   const months = lastMonths(6, ymFromDate(new Date()));
   const vals = months.map(ym => sum(monthTx(ym)
     .filter(t => t.type === 'gasto' && catById(t.categoryId)?.group !== 'ahorro')
-    .map(t => t.amount))).filter(v => v > 0);
+    .map(t => bv(t)))).filter(v => v > 0);
   const recent = vals.slice(-3);
   return recent.length ? sum(recent) / recent.length : 0;
 }
@@ -464,11 +509,11 @@ function monthStats(L, ym) {
   for (const t of L.transactions) {
     if (!t.date.startsWith(ym)) continue;
     n++; days.add(t.date);
-    if (t.type === 'ingreso') ing += t.amount;
+    if (t.type === 'ingreso') ing += bv(t);
     if (t.type === 'gasto') {
-      spent.set(t.categoryId, (spent.get(t.categoryId) || 0) + t.amount);
+      spent.set(t.categoryId, (spent.get(t.categoryId) || 0) + bv(t));
       const g = cat(t.categoryId)?.group || 'gusto';
-      if (g === 'necesidad') nec += t.amount; else if (g === 'gusto') gus += t.amount;
+      if (g === 'necesidad') nec += bv(t); else if (g === 'gusto') gus += bv(t);
     }
   }
   const budgets = L.categories.filter(c => c.type === 'gasto' && Number(c.budget) > 0);
@@ -480,7 +525,7 @@ function monthStats(L, ym) {
 function avgExpensesOf(L) {
   const cat = id => L.categories.find(c => c.id === id);
   const vals = lastMonths(6, ymFromDate(new Date())).map(ym => sum(L.transactions
-    .filter(t => t.date.startsWith(ym) && t.type === 'gasto' && cat(t.categoryId)?.group !== 'ahorro').map(t => t.amount))).filter(v => v > 0);
+    .filter(t => t.date.startsWith(ym) && t.type === 'gasto' && cat(t.categoryId)?.group !== 'ahorro').map(t => bv(t)))).filter(v => v > 0);
   const recent = vals.slice(-3);
   return recent.length ? sum(recent) / recent.length : 0;
 }
@@ -681,6 +726,7 @@ function setView(view) {
 }
 
 function render() {
+  ensureBase(state);
   $('#monthLabel').textContent = monthName(currentYM);
   ({
     inicio: renderInicio,
@@ -758,8 +804,8 @@ function rayMoodFor(L) {
   const spent = new Map();
   for (const t of L.transactions) {
     if (!t.date.startsWith(ym)) continue;
-    if (t.type === 'ingreso') ing += t.amount;
-    if (t.type === 'gasto') { gas += t.amount; spent.set(t.categoryId, (spent.get(t.categoryId) || 0) + t.amount); }
+    if (t.type === 'ingreso') ing += bv(t);
+    if (t.type === 'gasto') { gas += bv(t); spent.set(t.categoryId, (spent.get(t.categoryId) || 0) + bv(t)); }
   }
   const over = L.categories.some(c => c.type === 'gasto' && Number(c.budget) > 0 && (spent.get(c.id) || 0) > Number(c.budget));
   if (p.status === 'en-riesgo' || over || (ing > 0 && gas > ing)) return 'preocupado';
@@ -914,8 +960,8 @@ function rule503020(txs, ing) {
   for (const t of txs) {
     if (t.type !== 'gasto') continue;
     const g = catById(t.categoryId)?.group || 'gusto';
-    if (g === 'necesidad') nec += t.amount;
-    else if (g === 'gusto') gus += t.amount;
+    if (g === 'necesidad') nec += bv(t);
+    else if (g === 'gusto') gus += bv(t);
   }
   const aho = ing - nec - gus; // lo que no se gastó + lo enviado a "ahorro"
   const rows = [
@@ -961,7 +1007,7 @@ function renderInicio() {
   const rate = ing > 0 ? bal / ing : null;
   const byCat = spendingByCategory(txs);
   const balances = accountBalances();
-  const totalBal = sum(state.accounts.map(a => balances[a.id] || 0));
+  const totalBal = sum(state.accounts.map(a => toBase(balances[a.id] || 0, accCur(state, a.id))));
   const rateCls = rate === null ? '' : rate >= 0.2 ? 'ing' : rate < 0 ? 'gas' : '';
 
   const sign = bal > 0 ? '+' : bal < 0 ? '−' : '';
@@ -1004,11 +1050,13 @@ function renderInicio() {
       <div class="card-head"><h2>${c.kind === 'personal' ? 'Mis cuentas' : 'Cuentas'}</h2>${isReadOnly() ? '' : `<button class="link" data-action="goto" data-view="ajustes">Gestionar ${ICONS.chevron}</button>`}</div>
       ${state.accounts.length ? state.accounts.map((a, i) => {
         const v = balances[a.id] || 0;
-        const share = totalBal > 0 && v > 0 ? pct(v / totalBal) + ' del total' : '';
+        const cur = accCur(state, a.id);
+        const vb = toBase(v, cur);
+        const share = [cur !== baseCur(state) ? `≈ ${fmt(vb)}` : '', totalBal > 0 && vb > 0 ? pct(vb / totalBal) + ' del total' : ''].filter(Boolean).join(' · ');
         return `<div class="asset">
           <span class="avatar" style="--c:${PALETTE[i % PALETTE.length]}">${esc((a.name || '?').trim().charAt(0).toUpperCase())}</span>
-          <div class="grow"><div class="asset-name">${esc(a.name)}</div><div class="asset-sub">${share}</div></div>
-          <div class="amt ${v < 0 ? 'gas' : ''}">${esc(fmt(v))}</div>
+          <div class="grow"><div class="asset-name">${esc(a.name)}</div><div class="asset-sub">${esc(share)}</div></div>
+          <div class="amt ${v < 0 ? 'gas' : ''}">${esc(fmtC(v, cur))}</div>
         </div>`;
       }).join('') : empty('No tienes cuentas. Agrégalas en Ajustes.')}
     </div>
@@ -1080,7 +1128,7 @@ function renderMovimientos() {
     return `<button class="tx" data-id="${esc(t.id)}">
       <i class="dot" style="--dot-c:${safeColor(color)}"></i>
       <div class="tx-main"><div class="tx-title">${esc(title)}</div><div class="tx-sub">${esc(sub)}</div></div>
-      <div class="tx-amt ${cls}">${sign}${esc(fmt(t.amount))}</div></button>`;
+      <div class="tx-amt ${cls}">${sign}${esc(fmtC(t.amount, accCur(state, t.accountId)))}</div></button>`;
   };
 
   $('#txList').innerHTML = list.length
@@ -1247,7 +1295,8 @@ function renderAjustes() {
     ${themeCard}
     ${ledgerTitle}
     <div class="card">
-      <h2>Moneda</h2>
+      <h2>Moneda principal</h2>
+      <p class="muted" style="margin:-6px 0 4px;font-size:.85rem">En esta moneda se calculan el patrimonio, el plan, los presupuestos y los reportes.</p>
       <div class="set-row">
         <input type="text" id="currencyInput" list="currencies" value="${esc(state.settings.currency)}" maxlength="6" style="text-transform:uppercase">
         <datalist id="currencies">
@@ -1255,14 +1304,16 @@ function renderAjustes() {
         </datalist>
         <span class="muted" style="font-size:.85rem">Ej: ${esc(fmt(1234.5))}</span>
       </div>
+      ${ratesBlock()}
     </div>
 
     <div class="card">
       <div class="card-head"><h2>Cuentas</h2><button class="btn small" data-action="add-acc">+ Agregar</button></div>
-      <p class="muted" style="margin:-6px 0 4px;font-size:.85rem">Nombre y saldo inicial de cada cuenta (efectivo, banco, billetera…).</p>
+      <p class="muted" style="margin:-6px 0 4px;font-size:.85rem">Nombre, moneda y saldo inicial de cada cuenta (efectivo, banco, USDT…).</p>
       ${state.accounts.map(a => `
         <div class="set-row">
           <input type="text" value="${esc(a.name)}" data-acc-name="${esc(a.id)}" maxlength="40" aria-label="Nombre de la cuenta">
+          <input type="text" class="cur-input" list="currencies" value="${esc(accCur(state, a.id))}" data-acc-cur="${esc(a.id)}" maxlength="6" aria-label="Moneda de la cuenta">
           <input type="number" step="0.01" value="${Number(a.initial) || 0}" data-acc-initial="${esc(a.id)}" aria-label="Saldo inicial">
           <button class="icon-btn" data-action="del-acc" data-id="${esc(a.id)}" aria-label="Eliminar">✕</button>
         </div>`).join('')}
@@ -1292,6 +1343,53 @@ function renderAjustes() {
       </div>
     </div>
     <p class="muted" style="text-align:center;font-size:.8rem">RayFin · ${state.transactions.length} movimientos guardados</p>`;
+}
+
+/** Tasas de cambio de las monedas de las cuentas. */
+function ratesBlock() {
+  const base = baseCur(state);
+  const curs = otherCurrencies(state);
+  if (!curs.length) return `<p class="muted" style="margin:10px 0 0;font-size:.82rem">¿Tienes cuentas en otra moneda (por ejemplo USDT o bolívares)? Cámbiale la moneda a la cuenta abajo y aquí podrás poner su tasa.</p>`;
+  const rows = curs.map(c => {
+    const v = rateOf(state, c);
+    // Mostrar siempre "1 moneda fuerte = X moneda débil"
+    const STRONG = new Set(['USD', 'USDT', 'USDC', 'EUR', 'GBP', 'CHF']);
+    const inv = v !== null ? v < 1 : (STRONG.has(base) && !STRONG.has(c));
+    const shown = v === null ? '' : round2(inv ? 1 / v : v);
+    return `<div class="rate-row">
+      <span>1 ${esc(inv ? base : c)} =</span>
+      <input type="number" min="0" step="0.0001" inputmode="decimal" value="${shown}" data-rate="${esc(c)}" data-inv="${inv ? 1 : ''}" placeholder="?" aria-label="Tasa de ${esc(c)}">
+      <span>${esc(inv ? c : base)}</span>
+      ${v === null ? '<span class="bad" style="font-size:.78rem">falta la tasa</span>' : ''}
+    </div>`;
+  }).join('');
+  const upd = state.settings.ratesUpdated ? `Actualizado: ${esc(new Date(state.settings.ratesUpdated).toLocaleString('es'))}` : '';
+  return `<div class="subhead">Tasas de cambio</div>
+    ${rows}
+    <div class="row-actions" style="margin-top:8px;align-items:center">
+      <button class="btn small" data-action="rates-fetch">Traer tasas de internet</button>
+      <span class="muted" style="font-size:.76rem">${upd}</span>
+    </div>
+    <p class="muted" style="margin:8px 0 0;font-size:.76rem">Cada movimiento guarda la tasa del día en que lo registras. El patrimonio usa la tasa actual. USDT se toma igual al dólar.</p>`;
+}
+
+/** Trae tasas oficiales de internet (USDT = USD). */
+async function fetchRates() {
+  const base = baseCur(state);
+  const lookupBase = base === 'USDT' ? 'USD' : base;
+  const res = await fetch(`https://open.er-api.com/v6/latest/${encodeURIComponent(lookupBase)}`);
+  const data = await res.json();
+  if (data.result !== 'success') throw new Error('sin datos');
+  const rates = { ...(state.settings.rates || {}) };
+  let n = 0;
+  for (const c of otherCurrencies(state)) {
+    const key = c === 'USDT' ? 'USD' : c;
+    const per = key === lookupBase ? 1 : data.rates[key]; // unidades de c por 1 moneda principal
+    if (per > 0) { rates[c] = 1 / per; n++; }
+  }
+  state.settings.rates = rates;
+  state.settings.ratesUpdated = Date.now();
+  return n;
 }
 
 /** Tarjeta para invitar, aceptar invitaciones y gestionar espacios compartidos. */
@@ -1375,9 +1473,32 @@ function syncTxForm(keep = {}) {
     const cats = state.categories.filter(c => c.type === type);
     fillSelect(txForm.categoryId, cats, keep.categoryId);
   }
-  fillSelect(txForm.accountId, state.accounts, keep.accountId ?? lastAccountId ?? state.accounts[0]?.id);
+  const accLabel = a => ({ id: a.id, name: otherCurrencies(state).length ? `${a.name} · ${accCur(state, a.id)}` : a.name });
+  fillSelect(txForm.accountId, state.accounts.map(accLabel), keep.accountId ?? lastAccountId ?? state.accounts[0]?.id);
   const to = keep.toAccountId ?? state.accounts.find(a => a.id !== txForm.accountId.value)?.id;
-  fillSelect(txForm.toAccountId, state.accounts, to);
+  fillSelect(txForm.toAccountId, state.accounts.map(accLabel), to);
+  if (keep.toAmount) txForm.toAmount.value = keep.toAmount;
+  updateAmountHints();
+}
+
+/** Muestra la moneda del monto, su equivalente y (en transferencias entre monedas) cuánto llega. */
+function updateAmountHints() {
+  const cur = accCur(state, txForm.accountId.value);
+  const base = baseCur(state);
+  const amount = Number(txForm.amount.value) || 0;
+  $('#amountCur').textContent = otherCurrencies(state).length || cur !== base ? cur : '';
+  const r = rateOf(state, cur);
+  $('#amountHint').textContent = cur !== base && amount > 0
+    ? (r ? `≈ ${fmt(amount * r)}` : `Falta la tasa de ${cur} en Ajustes`) : '';
+  const isTr = txForm.type.value === 'transferencia';
+  const toCur = accCur(state, txForm.toAccountId.value);
+  const diff = isTr && toCur !== cur;
+  $('#toAmountField').hidden = !diff;
+  $('#toAmountCur').textContent = toCur;
+  if (diff && !txForm.toAmount.dataset.touched) {
+    const rf = rateOf(state, cur), rt = rateOf(state, toCur);
+    txForm.toAmount.value = amount > 0 && rf && rt ? round2(amount * rf / rt) : '';
+  }
 }
 
 function openTx(tx = null, type = 'gasto') {
@@ -1392,7 +1513,9 @@ function openTx(tx = null, type = 'gasto') {
   $('#txDelete').hidden = !tx;
   txForm.type.value = tx?.type || type;
   syncTxForm(tx || {});
+  txForm.toAmount.dataset.touched = tx?.toAmount ? '1' : '';
   txForm.amount.value = tx ? tx.amount : '';
+  if (tx?.toAmount) txForm.toAmount.value = tx.toAmount;
   txForm.date.value = tx?.date || (currentYM === ymFromDate(new Date()) ? todayStr() : currentYM + '-01');
   txForm.note.value = tx?.note || '';
   txDialog.showModal();
@@ -1401,6 +1524,11 @@ function openTx(tx = null, type = 'gasto') {
 
 txForm.addEventListener('change', e => {
   if (e.target.name === 'type') syncTxForm({ accountId: txForm.accountId.value });
+  else if (['accountId', 'toAccountId'].includes(e.target.name)) { txForm.toAmount.dataset.touched = ''; updateAmountHints(); }
+});
+txForm.addEventListener('input', e => {
+  if (e.target.name === 'amount') updateAmountHints();
+  if (e.target.name === 'toAmount') txForm.toAmount.dataset.touched = '1';
 });
 
 txForm.addEventListener('submit', e => {
@@ -1416,9 +1544,21 @@ txForm.addEventListener('submit', e => {
     accountId: txForm.accountId.value,
     note: txForm.note.value.trim()
   };
+  // Tasa del día si la cuenta está en otra moneda
+  const cur = accCur(state, data.accountId);
+  if (cur !== baseCur(state)) {
+    const r = rateOf(state, cur);
+    if (!r) { toast(`Primero pon la tasa de ${cur} en Ajustes.`); return; }
+    data.fx = r;
+  }
   if (type === 'transferencia') {
     data.toAccountId = txForm.toAccountId.value;
     if (data.toAccountId === data.accountId) { toast('Elige dos cuentas distintas.'); return; }
+    if (accCur(state, data.toAccountId) !== cur) {
+      const toAmount = round2(parseFloat(txForm.toAmount.value));
+      if (!(toAmount > 0)) { toast('Escribe cuánto llega a la otra cuenta.'); return; }
+      data.toAmount = toAmount;
+    }
   } else {
     data.categoryId = txForm.categoryId.value;
     if (!data.categoryId) { toast('Crea una categoría primero en Ajustes.'); return; }
@@ -1567,6 +1707,13 @@ document.addEventListener('click', e => {
       save(); render();
       break;
     case 'quick': openTx(null, btn.dataset.type); break;
+    case 'rates-fetch':
+      if (guardRO()) break;
+      btn.disabled = true;
+      fetchRates()
+        .then(n => { save(); render(); toast(n ? `Tasas actualizadas (${n})` : 'No encontré esas monedas; ponlas a mano.'); })
+        .catch(() => { btn.disabled = false; toast('No se pudo conectar. Escribe la tasa a mano.'); });
+      break;
     case 'ray-closet': openCloset(); break;
     case 'ray-partner': toast('Es el Ray de ' + currentCtx().short + ' 😊'); break;
     case 'ray-next': {
@@ -1680,7 +1827,7 @@ document.addEventListener('change', e => {
       .catch(cloudFail);
     return;
   }
-  if (isReadOnly() && (d.budget || d.accName || d.accInitial || d.catName || d.catGroup || d.catColor || t.id === 'currencyInput')) {
+  if (isReadOnly() && (d.budget || d.accName || d.accInitial || d.accCur || d.rate || d.catName || d.catGroup || d.catColor || t.id === 'currencyInput')) {
     guardRO();
     return;
   }
@@ -1702,9 +1849,18 @@ document.addEventListener('change', e => {
   } else if (d.catColor) {
     const c = catById(d.catColor);
     if (c) c.color = t.value;
+  } else if (d.accCur) {
+    const a = accById(d.accCur);
+    if (a) a.currency = t.value.trim().toUpperCase() || baseCur(state);
+  } else if (d.rate) {
+    const val = Number(t.value);
+    const rates = { ...(state.settings.rates || {}) };
+    if (val > 0) rates[d.rate] = d.inv ? 1 / val : val; else delete rates[d.rate];
+    state.settings.rates = rates;
   } else if (t.id === 'currencyInput') {
     state.settings.currency = t.value.trim().toUpperCase() || 'USD';
     buildFormatter();
+    curFmts.clear();
   } else {
     return;
   }
@@ -1755,13 +1911,13 @@ function exportCSV() {
     const s = String(v ?? '');
     return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const head = ['fecha', 'tipo', 'categoria', 'grupo', 'cuenta', 'cuenta_destino', 'monto', 'nota'];
+  const head = ['fecha', 'tipo', 'categoria', 'grupo', 'cuenta', 'cuenta_destino', 'monto', 'moneda', 'monto_' + baseCur(state).toLowerCase(), 'nota'];
   const rows = [...state.transactions]
     .sort((a, b) => a.date.localeCompare(b.date))
     .map(t => {
       const c = catById(t.categoryId);
       return [t.date, t.type, c?.name || '', c?.group ? GROUPS[c.group] : '', accById(t.accountId)?.name || '',
-        accById(t.toAccountId)?.name || '', t.amount.toFixed(2), t.note || ''].map(q).join(',');
+        accById(t.toAccountId)?.name || '', t.amount.toFixed(2), accCur(state, t.accountId), bv(t).toFixed(2), t.note || ''].map(q).join(',');
     });
   download(`rayfin-${todayStr()}.csv`, '﻿' + [head.join(','), ...rows].join('\n'), 'text/csv;charset=utf-8');
 }

@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="styles.css?v=20261103u">
+  <link rel="stylesheet" href="styles.css?v=20261104b">
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 </head>
 <body class="splash-on">
@@ -146,8 +146,9 @@
         <label><input type="radio" name="type" value="ingreso"><span>Ingreso</span></label>
         <label><input type="radio" name="type" value="transferencia"><span>Transferencia</span></label>
       </div>
-      <label class="field">Monto
+      <label class="field"><span>Monto <b id="amountCur" class="cur-tag"></b></span>
         <input type="number" name="amount" inputmode="decimal" step="0.01" min="0.01" required placeholder="0.00">
+        <small id="amountHint" class="amount-hint"></small>
       </label>
       <label class="field">Fecha
         <input type="date" name="date" required>
@@ -160,6 +161,9 @@
       </label>
       <label class="field" id="toAccountField" hidden>Hacia la cuenta
         <select name="toAccountId"></select>
+      </label>
+      <label class="field" id="toAmountField" hidden><span>Monto que llega <b id="toAmountCur" class="cur-tag"></b></span>
+        <input type="number" name="toAmount" inputmode="decimal" step="0.01" min="0.01" placeholder="0.00">
       </label>
       <label class="field">Nota (opcional)
         <input type="text" name="note" maxlength="120" placeholder="Ej: supermercado, almuerzo…">
@@ -232,11 +236,11 @@
   <input type="file" id="importFile" accept="application/json,.json" hidden>
   <div id="toast" role="status" aria-live="polite"></div>
 
-  <script src="firebase-config.js?v=20261103u"></script>
-  <script src="ray.js?v=20261103u"></script>
-  <script src="app.js?v=20261103u"></script>
-  <script src="auth-bg.js?v=20261103u"></script>
-  <script src="splash.js?v=20261103u"></script>
-  <script type="module" src="cloud.js?v=20261103u"></script>
+  <script src="firebase-config.js?v=20261104b"></script>
+  <script src="ray.js?v=20261104b"></script>
+  <script src="app.js?v=20261104b"></script>
+  <script src="auth-bg.js?v=20261104b"></script>
+  <script src="splash.js?v=20261104b"></script>
+  <script type="module" src="cloud.js?v=20261104b"></script>
 </body>
 </html>

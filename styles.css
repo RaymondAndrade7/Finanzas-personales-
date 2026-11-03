@@ -871,3 +871,14 @@ body.read-only .tx { cursor: default; }
 .confetti i { position: absolute; top: -12px; width: 8px; height: 13px; border-radius: 2px; animation-name: confettiFall; animation-timing-function: cubic-bezier(.25, .6, .5, 1); animation-fill-mode: forwards; }
 .confetti i:nth-child(3n) { width: 6px; height: 6px; border-radius: 50%; }
 @keyframes confettiFall { to { transform: translateY(105vh) rotate(720deg); opacity: .9; } }
+
+/* ---------- Varias monedas ---------- */
+.cur-tag { font-size: .72rem; font-weight: 700; color: var(--text); background: var(--surface-2); padding: 1px 7px; border-radius: 5px; margin-left: 4px; }
+.cur-tag:empty { display: none; }
+.amount-hint { color: var(--muted); font-weight: 500; min-height: 0; }
+.amount-hint:empty { display: none; }
+.set-row input.cur-input { width: 74px; flex: none; text-transform: uppercase; text-align: center; padding-left: 6px; padding-right: 6px; }
+.rate-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: .9rem; font-weight: 600; flex-wrap: wrap; }
+.rate-row input { width: 130px; flex: none; }
+.set-row input.cur-input { width: 62px; }
+.set-row input[data-acc-initial] { width: 92px; }
