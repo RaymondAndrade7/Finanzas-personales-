@@ -1,5 +1,5 @@
 // Service worker: permite usar la app sin conexión.
-const CACHE = 'rayfin-v15';
+const CACHE = 'rayfin-v16';
 const ASSETS = [
   './',
   './index.html',

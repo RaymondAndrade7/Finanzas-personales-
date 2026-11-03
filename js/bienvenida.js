@@ -110,6 +110,7 @@ function finishWelcome() {
   for (const [c, r] of Object.entries(wz.rates)) if (r.value > 0) rates[c] = r.value;
   if (wz.extra.includes('USDT') && wz.base === 'USD' && !rates.USDT) rates.USDT = 1;
   L.settings.rates = rates;
+  if (Object.values(wz.rates).some(r => r.value > 0)) L.settings.ratesUpdated = Date.now(); // tasa escrita a mano
   L.accounts = wz.accounts.filter(a => a.name.trim()).map(a => {
     const prev = L.accounts.find(x => x.id === a.id) || {};
     return { ...prev, id: a.id || uid(), name: a.name.trim(), currency: (a.currency || wz.base) === wz.base ? undefined : a.currency, initial: round2(a.initial) };
@@ -121,6 +122,7 @@ function finishWelcome() {
   curFmts.clear();
   ensureBase(L);
   persistLedger('personal', L);
+  autoRates('personal'); // solo busca las tasas que falten
 }
 
 function initWelcome() {

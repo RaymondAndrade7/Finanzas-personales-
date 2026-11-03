@@ -135,8 +135,14 @@ document.addEventListener('click', e => {
       if (guardRO()) break;
       btn.disabled = true;
       fetchRates()
-        .then(n => { save(); render(); toast(n ? `Tasas actualizadas (${n})` : 'No encontré esas monedas; ponlas a mano.'); })
+        .then(n => { ensureBase(state); save(); render(); toast(`Tasas actualizadas (${n})`); })
         .catch(() => { btn.disabled = false; toast('No se pudo conectar. Escribe la tasa a mano.'); });
+      break;
+    case 'ves-source':
+      if (guardRO()) break;
+      state.settings.vesSource = btn.dataset.v;
+      save(); render();
+      autoRates(ctxKey, { force: true });
       break;
     case 'ray-closet': openCloset(); break;
     case 'ray-partner': toast('Es el Ray de ' + currentCtx().short + ' 😊'); break;
@@ -256,6 +262,13 @@ document.addEventListener('change', e => {
     save(); render();
     return;
   }
+  if ('ratesAuto' in d) {
+    if (guardRO()) return;
+    state.settings.ratesAuto = t.checked;
+    save(); render();
+    if (t.checked) autoRates(ctxKey, { force: true });
+    return;
+  }
   if ('debtExtra' in d) {
     if (guardRO()) return;
     state.settings.debtExtra = Math.max(0, round2(t.value));
@@ -300,11 +313,13 @@ document.addEventListener('change', e => {
   } else if (d.accCur) {
     const a = accById(d.accCur);
     if (a) a.currency = t.value.trim().toUpperCase() || baseCur(state);
+    setTimeout(() => autoRates(ctxKey), 0);
   } else if (d.rate) {
     const val = Number(t.value);
     const rates = { ...(state.settings.rates || {}) };
     if (val > 0) rates[d.rate] = d.inv ? 1 / val : val; else delete rates[d.rate];
     state.settings.rates = rates;
+    if (val > 0) state.settings.ratesUpdated = Date.now(); // se respeta hasta la próxima actualización automática
   } else if (t.id === 'currencyInput') {
     state.settings.currency = t.value.trim().toUpperCase() || 'USD';
     buildFormatter();

@@ -36,7 +36,7 @@ async function setup() {
 async function localPage(env, { welcome = false, theme } = {}) {
   const ctx = await env.browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
   await ctx.route('**/firebase-config.js*', r => r.fulfill({ contentType: 'application/javascript', body: 'window.FIREBASE_CONFIG = {};' }));
-  if (!welcome) await ctx.addInitScript(() => { try { if (!localStorage.getItem('mis-finanzas-v1')) localStorage.setItem('mis-finanzas-v1', JSON.stringify({ settings: { onboarded: true } })); } catch (e) {} });
+  if (!welcome) await ctx.addInitScript(() => { try { if (!localStorage.getItem('mis-finanzas-v1')) localStorage.setItem('mis-finanzas-v1', JSON.stringify({ settings: { onboarded: true, ratesAuto: false } })); } catch (e) {} });
   if (theme) await ctx.addInitScript(t => { try { localStorage.setItem('mf-theme', t); } catch (e) {} }, theme);
   const page = await ctx.newPage();
   const errors = [];

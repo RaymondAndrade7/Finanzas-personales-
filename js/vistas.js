@@ -295,7 +295,7 @@ function renderAjustes() {
 function ratesBlock() {
   const base = baseCur(state);
   const curs = otherCurrencies(state);
-  if (!curs.length) return `<p class="muted" style="margin:10px 0 0;font-size:.82rem">¿Tienes cuentas en otra moneda (por ejemplo USDT o bolívares)? Cámbiale la moneda a la cuenta abajo y aquí podrás poner su tasa.</p>`;
+  if (!curs.length) return `<p class="muted" style="margin:10px 0 0;font-size:.82rem">¿Tienes cuentas en otra moneda (por ejemplo USDT o bolívares)? Cámbiale la moneda a la cuenta abajo y la tasa se buscará sola.</p>`;
   const rows = curs.map(c => {
     const v = rateOf(state, c);
     // Mostrar siempre "1 moneda fuerte = X moneda débil"
@@ -310,32 +310,93 @@ function ratesBlock() {
     </div>`;
   }).join('');
   const upd = state.settings.ratesUpdated ? `Actualizado: ${esc(new Date(state.settings.ratesUpdated).toLocaleString('es'))}` : '';
+  const auto = state.settings.ratesAuto !== false;
+  const hasVes = base === 'VES' || curs.includes('VES');
+  const src = state.settings.vesSource === 'paralelo' ? 'paralelo' : 'oficial';
   return `<div class="subhead">Tasas de cambio</div>
+    ${hasVes ? `<div class="pills" style="margin-bottom:8px">
+      <button class="pill sm ${src === 'oficial' ? 'active' : ''}" data-action="ves-source" data-v="oficial">Bolívar: BCV (oficial)</button>
+      <button class="pill sm ${src === 'paralelo' ? 'active' : ''}" data-action="ves-source" data-v="paralelo">Bolívar: paralelo</button>
+    </div>` : ''}
     ${rows}
+    <label class="check" style="margin-top:8px"><input type="checkbox" data-rates-auto ${auto ? 'checked' : ''}><span>Actualizar las tasas solas desde internet (al abrir la app, cada pocas horas)</span></label>
     <div class="row-actions" style="margin-top:8px;align-items:center">
-      <button class="btn small" data-action="rates-fetch">Traer tasas de internet</button>
+      <button class="btn small" data-action="rates-fetch">Actualizar ahora</button>
       <span class="muted" style="font-size:.76rem">${upd}</span>
     </div>
-    <p class="muted" style="margin:8px 0 0;font-size:.76rem">Cada movimiento guarda la tasa del día en que lo registras. El patrimonio usa la tasa actual. USDT se toma igual al dólar.</p>`;
+    <p class="muted" style="margin:8px 0 0;font-size:.76rem">Cada movimiento guarda la tasa del día en que lo registras. El patrimonio usa la tasa actual. USDT se toma igual al dólar.${auto ? ' Si escribes una tasa a mano, se reemplazará en la próxima actualización automática.' : ''}</p>`;
 }
 
-/** Trae tasas oficiales de internet (USDT = USD). */
-async function fetchRates() {
-  const base = baseCur(state);
-  const lookupBase = base === 'USDT' ? 'USD' : base;
-  const res = await fetch(`https://open.er-api.com/v6/latest/${encodeURIComponent(lookupBase)}`);
-  const data = await res.json();
-  if (data.result !== 'success') throw new Error('sin datos');
-  const rates = { ...(state.settings.rates || {}) };
+/** Bolívar: tasa BCV (oficial) o paralelo, en bolívares por dólar. */
+async function fetchVesPerUsd(source) {
+  const data = await (await fetch('https://ve.dolarapi.com/v1/dolares')).json();
+  const row = data.find(x => x.fuente === (source === 'paralelo' ? 'paralelo' : 'oficial'));
+  return row && Number(row.promedio) > 0 ? Number(row.promedio) : null;
+}
+
+/**
+ * Trae las tasas de internet para un libro. El bolívar usa BCV o paralelo (ve.dolarapi.com);
+ * las demás monedas, la referencia de open.er-api.com. USDT se toma igual al dólar.
+ */
+async function fetchRates(L = state) {
+  const base = baseCur(L);
+  const curs = otherCurrencies(L);
+  if (!curs.length) return 0;
+  const usdLike = c => c === 'USD' || c === 'USDT' || c === 'USDC';
+  const rates = { ...(L.settings.rates || {}) };
   let n = 0;
-  for (const c of otherCurrencies(state)) {
-    const key = c === 'USDT' ? 'USD' : c;
-    const per = key === lookupBase ? 1 : data.rates[key]; // unidades de c por 1 moneda principal
-    if (per > 0) { rates[c] = 1 / per; n++; }
+  // Bolívar contra dólar (en cualquiera de los dos sentidos)
+  const needsVes = (base === 'VES' && curs.some(usdLike)) || (usdLike(base) && curs.includes('VES'));
+  if (needsVes) {
+    const ves = await fetchVesPerUsd(L.settings.vesSource).catch(() => null);
+    if (ves) {
+      for (const c of curs) {
+        if (base === 'VES' && usdLike(c)) { rates[c] = ves; n++; }
+        if (usdLike(base) && c === 'VES') { rates[c] = 1 / ves; n++; }
+      }
+    }
   }
-  state.settings.rates = rates;
-  state.settings.ratesUpdated = Date.now();
+  // Las demás monedas
+  const rest = curs.filter(c => !(needsVes && ((base === 'VES' && usdLike(c)) || (usdLike(base) && c === 'VES'))));
+  if (rest.length) {
+    const lookupBase = usdLike(base) ? 'USD' : base;
+    const data = await (await fetch(`https://open.er-api.com/v6/latest/${encodeURIComponent(lookupBase)}`)).json().catch(() => null);
+    if (data && data.result === 'success') {
+      for (const c of rest) {
+        const key = usdLike(c) ? 'USD' : c;
+        const per = key === lookupBase ? 1 : data.rates[key]; // unidades de c por 1 moneda principal
+        if (per > 0) { rates[c] = 1 / per; n++; }
+      }
+    }
+  }
+  if (!n) throw new Error('sin datos');
+  L.settings.rates = rates;
+  L.settings.ratesUpdated = Date.now();
   return n;
+}
+
+const RATES_EVERY = 6 * 3600e3; // revisar cada 6 horas como máximo
+const ratesBusy = new Set();
+
+/** Actualiza las tasas sola (al abrir la app y al volver), si hace falta. */
+async function autoRates(key, { force = false } = {}) {
+  const L = stores[key];
+  if (!L || key.startsWith('user:') || L.settings.ratesAuto === false || !otherCurrencies(L).length) return;
+  const missing = otherCurrencies(L).some(c => !rateOf(L, c));
+  if (!force && !missing && Date.now() - (Number(L.settings.ratesUpdated) || 0) < RATES_EVERY) return;
+  if (ratesBusy.has(key)) return;
+  ratesBusy.add(key);
+  try {
+    await fetchRates(L);
+    ensureBase(L);
+    persistLedger(key, L);
+    if (key === ctxKey) {
+      render();
+      const ves = rateOf(L, 'VES');
+      if (ves && missing) toast(`Tasa actualizada: 1 USD = ${round2(baseCur(L) === 'VES' ? rateOf(L, 'USD') || 0 : 1 / ves).toLocaleString('es')} Bs (${L.settings.vesSource === 'paralelo' ? 'paralelo' : 'BCV'})`);
+    }
+  } catch { /* sin conexión: se intenta la próxima vez */ }
+  finally { ratesBusy.delete(key); }
 }
 
 let needVerify = null;      // invitación que espera la verificación del correo

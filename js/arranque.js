@@ -11,6 +11,8 @@ function welcomeWhenReady() {
 }
 
 applyTheme(getTheme());
+// Al volver a la app, revisar si toca actualizar las tasas (local o nube)
+document.addEventListener('visibilitychange', () => { if (!document.hidden && appStarted) autoRates(ctxKey); });
 initLock();
 initWelcome();
 initDebtDialog();
@@ -35,7 +37,7 @@ window.App = {
   /** Datos de un libro llegados de la nube (personal, space:ID o user:UID). */
   setStore(key, data) {
     stores[key] = normalize(data);
-    if (key === 'personal' || key.startsWith('space:')) setTimeout(() => runRecurring(key), 0);
+    if (key === 'personal' || key.startsWith('space:')) setTimeout(() => { runRecurring(key); autoRates(key); }, 0);
     if (key === ctxKey) {
       state = stores[key];
       buildFormatter();
@@ -80,6 +82,7 @@ if (CLOUD_ENABLED) {
   appStarted = true;
   showLock();
   runRecurring('personal');
+  autoRates('personal');
   startView();
   welcomeWhenReady();
 }
