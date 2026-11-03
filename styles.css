@@ -882,3 +882,23 @@ body.read-only .tx { cursor: default; }
 .rate-row input { width: 130px; flex: none; }
 .set-row input.cur-input { width: 62px; }
 .set-row input[data-acc-initial] { width: 92px; }
+
+/* ---------- Pagos fijos ---------- */
+.subtabs { margin: 0 0 12px; }
+.repeat-field select { margin-bottom: 4px; }
+.repeat-field[hidden] { display: none; }
+.up-row, .rec-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.up-row:last-of-type, .rec-row:last-of-type { border-bottom: 0; }
+.up-row .grow, .rec-row .grow { flex: 1; min-width: 0; }
+.up-title { font-weight: 600; font-size: .92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.up-sub { font-size: .76rem; color: var(--muted); }
+.up-amt { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: .92rem; }
+.up-row.due .up-sub { color: var(--warn); font-weight: 600; }
+.up-act { display: flex; gap: 6px; width: 100%; justify-content: flex-end; }
+.up-alert { margin: -4px 0 4px; font-size: .8rem; font-weight: 700; color: var(--warn); }
+.up-total { display: flex; justify-content: space-between; padding-top: 10px; margin-top: 4px; border-top: 1px solid var(--border); font-size: .86rem; color: var(--muted); }
+.rec-row.paused { opacity: .5; }
+.rec-actions { display: flex; gap: 2px; }
+.rec-actions .icon-btn { font-size: .85rem; }
+.rec-actions .icon-btn { width: 30px; height: 30px; }
+.rec-row .up-amt { font-size: .88rem; }

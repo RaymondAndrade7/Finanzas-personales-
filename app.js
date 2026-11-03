@@ -50,7 +50,9 @@ function defaultState() {
       { id: uid(), name: 'USDT', initial: 0 }
     ],
     transactions: [],
-    goals: [{ id: uid(), name: 'Fondo de emergencia', target: 0, saved: 0, deadline: '' }]
+    goals: [{ id: uid(), name: 'Fondo de emergencia', target: 0, saved: 0, deadline: '' }],
+    recurring: [],
+    debts: []
   };
 }
 
@@ -68,7 +70,9 @@ function normalize(s) {
         .map(t => ({ ...t, amount: round2(t.amount) }))
         .filter(t => t.amount > 0)
       : [],
-    goals: Array.isArray(s.goals) ? s.goals : d.goals
+    goals: Array.isArray(s.goals) ? s.goals : d.goals,
+    recurring: Array.isArray(s.recurring) ? s.recurring : [],
+    debts: Array.isArray(s.debts) ? s.debts : []
   };
   return ensureBase(out);
 }
@@ -336,8 +340,10 @@ function planFor(L, ym) {
     if (t.type === 'ingreso') ing += bv(t);
     else if (t.type === 'gasto' && (cat(t.categoryId)?.group || 'gusto') !== 'ahorro') spend += bv(t);
   }
-  const base = ing > 0 ? ing : Number(plan.expected) || 0;
-  const estimated = ing <= 0 && base > 0;
+  const committed = committedFor(L, ym); // pagos fijos que faltan este mes
+  const projected = ing + committed.income;
+  const base = projected > 0 ? projected : Number(plan.expected) || 0;
+  const estimated = (ing <= 0 && base > 0) || committed.income > 0;
   const target = round2(plan.mode === 'fixed' ? Number(plan.fixed) || 0 : base * (Number(plan.pct) || 0) / 100);
   const saved = round2(ing - spend);
   const nowYM = ymFromDate(new Date());
@@ -345,7 +351,7 @@ function planFor(L, ym) {
   const [y, m] = ym.split('-').map(Number);
   const dim = new Date(y, m, 0).getDate();
   const daysLeft = isCurrent ? dim - new Date().getDate() + 1 : 0;
-  const canSpend = round2(base - target - spend);      // lo que aún se puede gastar sin romper el plan
+  const canSpend = round2(base - target - spend - committed.spend); // lo que aún se puede gastar sin romper el plan
   const perDay = daysLeft > 0 ? canSpend / daysLeft : 0;
   let status;
   if (target <= 0) status = 'sin-plan';
@@ -353,7 +359,7 @@ function planFor(L, ym) {
   else if (isPast) status = 'no-cumplido';
   else if (canSpend < 0) status = 'en-riesgo';
   else status = 'en-camino';
-  return { plan, ing, spend, base, estimated, target, saved, canSpend, perDay, daysLeft, isCurrent, isPast, status,
+  return { plan, ing, spend, base, estimated, target, saved, canSpend, perDay, daysLeft, isCurrent, isPast, status, committed,
     progress: target > 0 ? Math.max(0, saved) / target : 0 };
 }
 
@@ -401,7 +407,8 @@ function planCard(L, { who = null, editable = false } = {}) {
   else if (p.status === 'no-cumplido') foot = `Faltaron ${esc(fmt(p.target - p.saved))} para la meta.`;
   else if (p.canSpend >= 0) foot = `Puedes gastar <b>${esc(fmt(p.canSpend))}</b> más este mes${p.daysLeft > 0 ? ` · <b>${esc(fmt(p.perDay))}</b> por día` : ''}.`;
   else foot = `Te pasaste <b class="bad">${esc(fmt(-p.canSpend))}</b> del gasto que permite el plan.`;
-  if (p.estimated) foot += ' <span class="muted">(estimado con el ingreso esperado)</span>';
+  if (p.committed.spend > 0 && p.isCurrent && p.status !== 'cumplido') foot += ` <span class="muted">Ya descontando ${esc(fmt(p.committed.spend))} de pagos fijos.</span>`;
+  if (p.estimated) foot += ` <span class="muted">(${p.committed.income > 0 ? 'cuenta el ingreso fijo que falta' : 'estimado con el ingreso esperado'})</span>`;
 
   const dots = hist.map(h => {
     const ok = h.status === 'cumplido' || h.status === 'cumpliendo';
@@ -1046,6 +1053,7 @@ function renderInicio() {
       ${stat('Ahorro', rate === null ? '—' : pct(rate), rateCls)}
     </div>
     ${c.kind === 'space' ? couplePlansCard(c.space) : planCard(state, { who: c.kind === 'partner' ? c.short : null, editable: c.kind === 'personal' })}
+    ${upcomingCard()}
     <div class="card">
       <div class="card-head"><h2>${c.kind === 'personal' ? 'Mis cuentas' : 'Cuentas'}</h2>${isReadOnly() ? '' : `<button class="link" data-action="goto" data-view="ajustes">Gestionar ${ICONS.chevron}</button>`}</div>
       ${state.accounts.length ? state.accounts.map((a, i) => {
@@ -1141,7 +1149,16 @@ function renderMovimientos() {
 
 /* ---------- Vista: Presupuesto ---------- */
 
+let budgetTab = 'presupuesto';
+function budgetTabs() {
+  const tabs = [['presupuesto', 'Presupuesto'], ['fijos', 'Pagos fijos']];
+  if (typeof reportsSection === 'function') tabs.push(['reportes', 'Reportes']);
+  return `<div class="pills subtabs">${tabs.map(([k, v]) => `<button class="pill ${budgetTab === k ? 'active' : ''}" data-action="budget-tab" data-tab="${k}">${v}</button>`).join('')}</div>`;
+}
+
 function renderPresupuesto() {
+  if (budgetTab === 'fijos') { $('#view-presupuesto').innerHTML = budgetTabs() + recurringSection(); return; }
+  if (budgetTab === 'reportes' && typeof reportsSection === 'function') { $('#view-presupuesto').innerHTML = budgetTabs() + reportsSection(); return; }
   const txs = monthTx(currentYM);
   const { ing } = totals(txs);
   const status = budgetStatus(txs);
@@ -1153,6 +1170,7 @@ function renderPresupuesto() {
   for (const s of status) byGroup[s.cat.group || 'gusto'] += s.budget;
 
   $('#view-presupuesto').innerHTML = `
+    ${budgetTabs()}
     <div class="card">
       <h2>Resumen del mes</h2>
       <div class="rows">
@@ -1457,6 +1475,7 @@ function sharingCard() {
 const txDialog = $('#txDialog');
 const txForm = $('#txForm');
 let editingTxId = null;
+let editingRecId = null; // editando un pago fijo (plantilla), no un movimiento
 let lastAccountId = null;
 
 function fillSelect(sel, items, selected) {
@@ -1501,13 +1520,15 @@ function updateAmountHints() {
   }
 }
 
-function openTx(tx = null, type = 'gasto') {
+function openTx(tx = null, type = 'gasto', rec = null) {
   if (!state.accounts.length) {
     toast('Primero crea una cuenta en Ajustes.');
     setView('ajustes');
     return;
   }
-  editingTxId = tx?.id || null;
+  editingRecId = rec?.id || null;
+  if (rec) tx = { ...rec, date: rec.next };
+  editingTxId = rec ? null : tx?.id || null;
   txForm.reset();
   $('#txTitle').textContent = tx ? 'Editar movimiento' : 'Nuevo movimiento';
   $('#txDelete').hidden = !tx;
@@ -1518,11 +1539,19 @@ function openTx(tx = null, type = 'gasto') {
   if (tx?.toAmount) txForm.toAmount.value = tx.toAmount;
   txForm.date.value = tx?.date || (currentYM === ymFromDate(new Date()) ? todayStr() : currentYM + '-01');
   txForm.note.value = tx?.note || '';
+  // Repetir: al crear, o al editar un pago fijo
+  $('#repeatField').hidden = !!editingTxId;
+  txForm.repeat.value = rec ? rec.freq : '';
+  txForm.auto.checked = rec ? !!rec.auto : true;
+  $('#autoField').hidden = !txForm.repeat.value;
+  $('#dateLabel').textContent = rec ? 'Próxima fecha' : 'Fecha';
+  if (rec) { $('#txTitle').textContent = 'Editar pago fijo'; $('#txDelete').hidden = true; }
   txDialog.showModal();
   if (!tx) setTimeout(() => txForm.amount.focus(), 50);
 }
 
 txForm.addEventListener('change', e => {
+  if (e.target.name === 'repeat') $('#autoField').hidden = !txForm.repeat.value;
   if (e.target.name === 'type') syncTxForm({ accountId: txForm.accountId.value });
   else if (['accountId', 'toAccountId'].includes(e.target.name)) { txForm.toAmount.dataset.touched = ''; updateAmountHints(); }
 });
@@ -1563,6 +1592,32 @@ txForm.addEventListener('submit', e => {
     data.categoryId = txForm.categoryId.value;
     if (!data.categoryId) { toast('Crea una categoría primero en Ajustes.'); return; }
   }
+  // Pago fijo: plantilla (y el primer movimiento si es nuevo)
+  const freq = txForm.repeat.value;
+  if (editingRecId || freq) {
+    const day = Number(data.date.slice(8, 10));
+    const tpl = { type: data.type, amount: data.amount, accountId: data.accountId, note: data.note, freq: freq || 'mensual', day, auto: txForm.auto.checked, active: true };
+    if (data.type === 'transferencia') { tpl.toAccountId = data.toAccountId; if (data.toAmount) tpl.toAmount = data.toAmount; }
+    else tpl.categoryId = data.categoryId;
+    state.recurring = state.recurring || [];
+    if (editingRecId) {
+      const r = state.recurring.find(x => x.id === editingRecId);
+      Object.assign(r, tpl, { next: data.date });
+      if (!r.createdBy && isSpace()) r.createdBy = { uid: window.Cloud.uid, name: window.Cloud.myName };
+      save();
+      txDialog.close();
+      runRecurring(ctxKey);
+      render();
+      toast('Pago fijo actualizado');
+      return;
+    }
+    const r = { id: uid(), ...tpl, next: advanceDate(data.date, tpl.freq, day) };
+    if (isSpace() && window.Cloud) r.createdBy = { uid: window.Cloud.uid, name: window.Cloud.myName };
+    state.recurring.push(r);
+    data.recurringId = r.id;
+    save();
+    setTimeout(() => { runRecurring(ctxKey); render(); }, 0); // si empezó en el pasado, ponerse al día
+  }
   let record;
   if (editingTxId) {
     const i = state.transactions.findIndex(t => t.id === editingTxId);
@@ -1579,7 +1634,7 @@ txForm.addEventListener('submit', e => {
   const ym = data.date.slice(0, 7);
   if (ym !== currentYM) currentYM = ym;
   render();
-  toast(editingTxId ? 'Movimiento actualizado' : 'Movimiento guardado ✓');
+  toast(editingTxId ? 'Movimiento actualizado' : freq ? `Guardado y programado: ${REC_FREQ[freq].toLowerCase()} ✓` : 'Movimiento guardado ✓');
 });
 
 $('#txDelete').addEventListener('click', () => {
@@ -1707,6 +1762,40 @@ document.addEventListener('click', e => {
       save(); render();
       break;
     case 'quick': openTx(null, btn.dataset.type); break;
+    case 'budget-tab': budgetTab = btn.dataset.tab; setView('presupuesto'); break;
+    case 'rec-new': openTx(null, 'gasto'); txForm.repeat.value = 'mensual'; $('#autoField').hidden = false; break;
+    case 'rec-edit': openTx(null, 'gasto', state.recurring.find(r => r.id === id)); break;
+    case 'rec-toggle': {
+      if (guardRO()) break;
+      const r = state.recurring.find(x => x.id === id);
+      r.active = !r.active;
+      if (r.active && r.next < todayStr() && r.auto) r.next = todayStr();
+      save(); render();
+      break;
+    }
+    case 'rec-del':
+      if (guardRO() || !confirm('¿Eliminar este pago fijo? Los movimientos ya registrados se quedan.')) break;
+      state.recurring = state.recurring.filter(r => r.id !== id);
+      save(); render();
+      break;
+    case 'rec-pay': {
+      if (guardRO()) break;
+      const r = state.recurring.find(x => x.id === id);
+      const tx = txFromRec(state, r, btn.dataset.date);
+      if (!state.transactions.some(t => t.id === tx.id)) { state.transactions.push(tx); saveTx(tx); }
+      r.next = advanceDate(btn.dataset.date, r.freq, r.day);
+      save(); render();
+      toast('Pago registrado ✓');
+      break;
+    }
+    case 'rec-skip': {
+      if (guardRO()) break;
+      const r = state.recurring.find(x => x.id === id);
+      r.next = advanceDate(r.next, r.freq, r.day);
+      save(); render();
+      toast('Saltado. Te lo recuerdo la próxima vez.');
+      break;
+    }
     case 'rates-fetch':
       if (guardRO()) break;
       btn.disabled = true;
@@ -1985,6 +2074,7 @@ window.App = {
   /** Datos de un libro llegados de la nube (personal, space:ID o user:UID). */
   setStore(key, data) {
     stores[key] = normalize(data);
+    if (key === 'personal' || key.startsWith('space:')) setTimeout(() => runRecurring(key), 0);
     if (key === ctxKey) {
       state = stores[key];
       buildFormatter();
@@ -2025,6 +2115,7 @@ if (CLOUD_ENABLED) {
   document.body.classList.add('auth-mode'); // cloud.js muestra el inicio de sesión
 } else {
   appStarted = true;
+  runRecurring('personal');
   startView();
 }
 

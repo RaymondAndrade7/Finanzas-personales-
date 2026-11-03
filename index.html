@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="styles.css?v=20261104b">
+  <link rel="stylesheet" href="styles.css?v=20261104e">
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 </head>
 <body class="splash-on">
@@ -150,7 +150,7 @@
         <input type="number" name="amount" inputmode="decimal" step="0.01" min="0.01" required placeholder="0.00">
         <small id="amountHint" class="amount-hint"></small>
       </label>
-      <label class="field">Fecha
+      <label class="field"><span id="dateLabel">Fecha</span>
         <input type="date" name="date" required>
       </label>
       <label class="field" id="catField">Categoría
@@ -168,6 +168,17 @@
       <label class="field">Nota (opcional)
         <input type="text" name="note" maxlength="120" placeholder="Ej: supermercado, almuerzo…">
       </label>
+      <div class="field repeat-field" id="repeatField">
+        <span>Repetir</span>
+        <select name="repeat">
+          <option value="">No se repite</option>
+          <option value="mensual">Cada mes</option>
+          <option value="quincenal">Cada 2 semanas</option>
+          <option value="semanal">Cada semana</option>
+          <option value="anual">Cada año</option>
+        </select>
+        <label class="check" id="autoField" hidden><input type="checkbox" name="auto" checked><span>Registrarlo solo en su fecha (si no, te lo recuerdo para confirmar)</span></label>
+      </div>
       <div class="dialog-actions">
         <button type="button" class="btn danger ghost" id="txDelete" hidden>Eliminar</button>
         <span class="spacer"></span>
@@ -236,11 +247,12 @@
   <input type="file" id="importFile" accept="application/json,.json" hidden>
   <div id="toast" role="status" aria-live="polite"></div>
 
-  <script src="firebase-config.js?v=20261104b"></script>
-  <script src="ray.js?v=20261104b"></script>
-  <script src="app.js?v=20261104b"></script>
-  <script src="auth-bg.js?v=20261104b"></script>
-  <script src="splash.js?v=20261104b"></script>
-  <script type="module" src="cloud.js?v=20261104b"></script>
+  <script src="firebase-config.js?v=20261104e"></script>
+  <script src="fijos.js?v=20261104e"></script>
+  <script src="ray.js?v=20261104e"></script>
+  <script src="app.js?v=20261104e"></script>
+  <script src="auth-bg.js?v=20261104e"></script>
+  <script src="splash.js?v=20261104e"></script>
+  <script type="module" src="cloud.js?v=20261104e"></script>
 </body>
 </html>

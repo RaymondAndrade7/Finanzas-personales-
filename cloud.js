@@ -224,6 +224,8 @@ async function startSession(A, F, auth, db, user) {
     categories: s.categories,
     accounts: s.accounts,
     goals: s.goals,
+    recurring: s.recurring || [],
+    debts: s.debts || [],
     updatedAt: F.serverTimestamp()
   });
   const metaOf = (key, s) => key === 'personal'
